@@ -9,6 +9,8 @@
  * under the terms of the GNU General Public License version 2 as published by
  * the Free Software Foundation.
  */
+#include <linux/mutex.h>
+#include <linux/wait.h>
 
 
 #define PS2_CMD_GETID		0x02f2
