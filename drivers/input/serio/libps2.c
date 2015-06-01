@@ -19,12 +19,19 @@
 #include <linux/serio.h>
 #include <linux/i8042.h>
 #include <linux/libps2.h>
+#include <linux/debugfs.h>
+#include <linux/poll.h>
+#include <uapi/linux/ps2monitor.h>
 
 #define DRIVER_DESC	"PS/2 driver library"
 
 MODULE_AUTHOR("Dmitry Torokhov <dtor@mail.ru>");
 MODULE_DESCRIPTION("PS/2 driver library");
 MODULE_LICENSE("GPL");
+
+#if defined(CONFIG_DEBUG_FS)
+static struct dentry *monitor_dir;
+#endif
 
 /*
  * ps2_sendbyte() sends a byte to the device and waits for acknowledge.
@@ -245,8 +252,7 @@ int __ps2_command(struct ps2dev *ps2dev, unsigned char *param, int command)
 
  out:
 	serio_pause_rx(ps2dev->serio);
-	ps2dev->flags = 0;
-	serio_continue_rx(ps2dev->serio);
+	ps2dev->flags = 0; serio_continue_rx(ps2dev->serio);
 
 	return rc;
 }
@@ -264,6 +270,46 @@ int ps2_command(struct ps2dev *ps2dev, unsigned char *param, int command)
 }
 EXPORT_SYMBOL(ps2_command);
 
+#if defined(CONFIG_DEBUG_FS)
+/*
+ * ps2_monitor_open() handler for when a userspace application opens the PS/2
+ * monitor file for a device
+ */
+static int ps2_monitor_open(struct inode *inode, struct file *file)
+{
+	struct ps2dev *ps2dev = inode->i_private;
+
+	ps2dev->monitor_count++;
+
+	return 0;
+}
+
+/*
+ * ps2_monitor_release() handler for when a userspace application closes the
+ * PS/2 monitor file for a device
+ */
+static int ps2_monitor_release(struct inode *inode, struct file *file)
+{
+	struct ps2dev *ps2dev = inode->i_private;
+
+	ps2dev->monitor_count--;
+
+	return 0;
+}
+
+/*
+ * ps2_monitor_poll() handler for when a userspace applications attempts to poll
+ * the PS/2 monitor for a device.
+ */
+static unsigned int ps2_monitor_poll(struct file *file,
+				     struct poll_table_struct *poll_table_struct)
+{
+	struct ps2dev *ps2dev = file->f_inode->i_private;
+
+	return 0;
+}
+#endif
+
 /*
  * ps2_init() initializes ps2dev structure
  */
@@ -274,8 +320,39 @@ void ps2_init(struct ps2dev *ps2dev, struct serio *serio)
 	lockdep_set_subclass(&ps2dev->cmd_mutex, serio->depth);
 	init_waitqueue_head(&ps2dev->wait);
 	ps2dev->serio = serio;
+
+#if defined(CONFIG_DEBUG_FS)
+	if (!monitor_dir) {
+		monitor_dir = debugfs_create_dir("ps2monitor", NULL);
+
+		if (!monitor_dir) {
+			printk(KERN_DEBUG "Failed to setup ps2monitor dir");
+
+			ps2dev->monitor_entry = NULL;
+			return;
+		}
+	}
+
+	ps2dev->monitor_entry =
+		debugfs_create_file(ps2dev->serio->name, 0400, monitor_dir,
+				    ps2dev, NULL);
+	ps2dev->monitor_count = 0;
+#endif
 }
 EXPORT_SYMBOL(ps2_init);
+
+/*
+ * ps2_deinit() denitializes ps2dev structure
+ */
+
+void ps2_deinit(struct ps2dev *ps2dev)
+{
+#if defined(CONFIG_DEBUG_FS)
+	if (ps2dev->monitor_entry)
+		debugfs_remove(ps2dev->monitor_entry);
+#endif
+}
+EXPORT_SYMBOL(ps2_deinit);
 
 /*
  * ps2_handle_ack() is supposed to be used in interrupt handler
@@ -372,3 +449,13 @@ void ps2_cmd_aborted(struct ps2dev *ps2dev)
 	ps2dev->flags &= PS2_FLAG_NAK;
 }
 EXPORT_SYMBOL(ps2_cmd_aborted);
+
+static void libps2_exit(void)
+{
+#if defined(CONFIG_DEBUG_FS)
+	if (monitor_dir)
+		debugfs_remove_recursive(monitor_dir);
+#endif
+}
+
+module_exit(libps2_exit);

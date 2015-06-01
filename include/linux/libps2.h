@@ -37,6 +37,14 @@ struct ps2dev {
 	/* Used to signal completion from interrupt handler */
 	wait_queue_head_t wait;
 
+#if defined(CONFIG_DEBUG_FS)
+	/* Allows monitoring of the raw PS/2 I/O coming from the device */
+	struct dentry *monitor_entry;
+	short monitor_count;
+
+	struct mutex monitor_poll_mutex;
+#endif
+
 	unsigned long flags;
 	unsigned char cmdbuf[8];
 	unsigned char cmdcnt;
@@ -44,6 +52,7 @@ struct ps2dev {
 };
 
 void ps2_init(struct ps2dev *ps2dev, struct serio *serio);
+void ps2_deinit(struct ps2dev *ps2dev);
 int ps2_sendbyte(struct ps2dev *ps2dev, unsigned char byte, int timeout);
 void ps2_drain(struct ps2dev *ps2dev, int maxbytes, int timeout);
 void ps2_begin_command(struct ps2dev *ps2dev);
