@@ -26,6 +26,24 @@
 #define PS2_FLAG_WAITID		8	/* Command execiting is GET ID */
 #define PS2_FLAG_NAK		16	/* Last transmission was NAKed */
 
+#define DEBUG
+#ifdef DEBUG
+#define ps2_dbg_init()                                \
+	do {                                          \
+		if (ps2_debug && ps2_start_time == 0) \
+			ps2_start_time = jiffies;     \
+	} while (0)
+#define ps2_dbg(format, arg...)                                            \
+	do {                                                               \
+		if (ps2_debug)                                             \
+			printk(KERN_DEBUG KBUILD_MODNAME ": [%d] " format, \
+			       (int) (jiffies - ps2_start_time), ##arg);   \
+	} while (0)
+#else
+#define ps2_dbg_init() do { } while (0)
+#define ps2_dbg(format, arg...) do { } while (0)
+#endif
+
 struct ps2dev {
 	struct serio *serio;
 

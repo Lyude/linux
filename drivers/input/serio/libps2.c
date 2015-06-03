@@ -13,6 +13,7 @@
 
 #include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/input.h>
@@ -21,6 +22,14 @@
 #include <linux/libps2.h>
 
 #define DRIVER_DESC	"PS/2 driver library"
+
+#ifdef DEBUG
+static bool ps2_debug;
+static unsigned long ps2_start_time;
+
+module_param_named(debug, ps2_debug, bool, 0600);
+MODULE_PARM_DESC(debug, "Enable PS/2 debugging output");
+#endif
 
 MODULE_AUTHOR("Dmitry Torokhov <dtor@mail.ru>");
 MODULE_DESCRIPTION("PS/2 driver library");
@@ -256,6 +265,19 @@ int ps2_command(struct ps2dev *ps2dev, unsigned char *param, int command)
 {
 	int rc;
 
+#ifdef DEBUG
+	int param_count = (command >> 12) & 0xf;
+	int i;
+
+	ps2_dbg("Command %02x -> %s", command & 0xff,
+		ps2dev->serio->name);
+
+	for (i = 0; i < param_count; i++) {
+		ps2_dbg("Parameter %02x -> %s", param[i],
+			ps2dev->serio->name);
+	}
+#endif
+
 	ps2_begin_command(ps2dev);
 	rc = __ps2_command(ps2dev, param, command);
 	ps2_end_command(ps2dev);
@@ -274,6 +296,7 @@ void ps2_init(struct ps2dev *ps2dev, struct serio *serio)
 	lockdep_set_subclass(&ps2dev->cmd_mutex, serio->depth);
 	init_waitqueue_head(&ps2dev->wait);
 	ps2dev->serio = serio;
+	ps2_dbg_init();
 }
 EXPORT_SYMBOL(ps2_init);
 
@@ -329,6 +352,8 @@ int ps2_handle_ack(struct ps2dev *ps2dev, unsigned char data)
 
 	if (data != PS2_RET_ACK)
 		ps2_handle_response(ps2dev, data);
+	else
+		ps2_dbg("Interrupt: %02x <- %s", data, ps2dev->serio->name);
 
 	return 1;
 }
@@ -355,6 +380,8 @@ int ps2_handle_response(struct ps2dev *ps2dev, unsigned char data)
 		ps2dev->flags &= ~PS2_FLAG_CMD;
 		wake_up(&ps2dev->wait);
 	}
+
+	ps2_dbg("Response %02x <- %s", data, ps2dev->serio->name);
 
 	return 1;
 }
