@@ -95,6 +95,9 @@ MODULE_PARM_DESC(i8042_kbd, "Turn i8042 kbd debugging output on or off");
 
 #define str_dbg(str, data, format, args...)                     \
 	do {                                                    \
+		if (!i8042_debug)                               \
+			break;                                  \
+                                                                \
 		if (str & I8042_STR_AUXDATA || i8042_debug_kbd) \
 			dbg("%02x " format, data, ##args);      \
 		else                                            \
