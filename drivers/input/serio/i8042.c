@@ -92,6 +92,16 @@ MODULE_PARM_DESC(debug, "Turn i8042 debugging mode on and off");
 static bool i8042_debug_kbd;
 module_param_named(debug_kbd, i8042_debug_kbd, bool, 0600);
 MODULE_PARM_DESC(i8042_kbd, "Turn i8042 kbd debugging output on or off");
+
+#define str_dbg(str, data, format, args...)                     \
+	do {                                                    \
+		if (str & I8042_STR_AUXDATA || i8042_debug_kbd) \
+			dbg("%02x " format, data, ##args);      \
+		else                                            \
+			dbg("** " format, ##args);              \
+	} while (0)
+#else
+#define str_dbg(str, data, format, args...) do { } while (0)
 #endif
 
 static bool i8042_bypass_aux_irq_test;
@@ -141,30 +151,6 @@ static struct platform_device *i8042_platform_device;
 static irqreturn_t i8042_interrupt(int irq, void *dev_id);
 static bool (*i8042_platform_filter)(unsigned char data, unsigned char str,
 				     struct serio *serio);
-
-#ifdef DEBUG
-static inline void str_dbg(unsigned char str, unsigned char data,
-			   const char *format, ...)
-{
-	va_list args;
-
-	if (!i8042_debug)
-		return;
-
-	if (str & I8042_STR_AUXDATA || i8042_debug_kbd)
-		dbg("%02x ", data);
-	else
-		dbg("** ");
-
-	va_start(args, format);
-	vprintk(format, args);
-	va_end(args);
-}
-#else
-static inline void str_dbg(unsigned char str, unsigned char data,
-			   const char *format, ...)
-{ }
-#endif
 
 void i8042_lock_chip(void)
 {
