@@ -151,13 +151,10 @@ static inline void str_dbg(unsigned char str, unsigned char data,
 	if (!i8042_debug)
 		return;
 
-	printk(KERN_DEBUG KBUILD_MODNAME ": [%d] ",
-	       (int)(jiffies - i8042_start_time));
-
 	if (str & I8042_STR_AUXDATA || i8042_debug_kbd)
-		printk("%02x ", data);
+		dbg("%02x ", data);
 	else
-		printk("** ");
+		dbg("** ");
 
 	va_start(args, format);
 	vprintk(format, args);
