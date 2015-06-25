@@ -73,6 +73,27 @@ static unsigned long i8042_start_time;
 			printk(KERN_DEBUG KBUILD_MODNAME ": [%d] " format,	\
 			       (int) (jiffies - i8042_start_time), ##arg);	\
 	} while (0)
+
+static inline void str_dbg(unsigned char str, unsigned char data,
+			   const char *format, ...)
+{
+	va_list args;
+
+	if (!i8042_debug)
+		return;
+
+	printk(KERN_DEBUG KBUILD_MODNAME ": [%d] ",
+	       (int)(jiffies - i8042_start_time));
+
+	if (str & I8042_STR_AUXDATA || i8042_debug_kbd)
+		printk("%02x ", data);
+	else
+		printk("** ");
+
+	va_start(args, format);
+	vprintk(format, args);
+	va_end(args);
+}
 #else
 #define dbg_init() do { } while (0)
 #define dbg(format, arg...)							\
@@ -80,6 +101,10 @@ static unsigned long i8042_start_time;
 		if (0)								\
 			printk(KERN_DEBUG pr_fmt(format), ##arg);		\
 	} while (0)
+
+static inline void str_dbg(unsigned char str, unsigned char data,
+			   const char *format, ...)
+{ }
 #endif
 
 #endif /* _I8042_H */

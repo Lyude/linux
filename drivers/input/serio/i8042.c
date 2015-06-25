@@ -92,22 +92,6 @@ MODULE_PARM_DESC(debug, "Turn i8042 debugging mode on and off");
 static bool i8042_debug_kbd;
 module_param_named(debug_kbd, i8042_debug_kbd, bool, 0600);
 MODULE_PARM_DESC(i8042_kbd, "Turn i8042 kbd debugging output on or off");
-
-#define port_dbg(port, format, args...) \
-	if (port != I8042_KBD_PORT_NO || i8042_debug_kbd) \
-		dbg(format, ##args);
-
-#define str_dbg(str, format, args...) \
-	if (str & I8042_STR_AUXDATA || i8042_debug_kbd) \
-		dbg(format, ##args);
-
-#define kbd_dbg(format, args...) \
-	if (i8042_debug_kbd) \
-		dbg(format, ##args);
-#else
-#define port_dbg(port, format, args...)
-#define str_dbg(port, format, args...)
-#define kbd_dbg(format, args...)
 #endif
 
 static bool i8042_bypass_aux_irq_test;
@@ -258,8 +242,8 @@ static int i8042_flush(void)
 		if (count++ < I8042_BUFFER_SIZE) {
 			udelay(50);
 			data = i8042_read_data();
-			str_dbg(str, "%02x <- i8042 (flush, %s)\n",
-				data, str & I8042_STR_AUXDATA ? "aux" : "kbd");
+			str_dbg(str, data, "<- i8042 (flush, %s)\n",
+				str & I8042_STR_AUXDATA ? "aux" : "kbd");
 		} else {
 			retval = -EIO;
 			break;
@@ -346,7 +330,7 @@ static int i8042_kbd_write(struct serio *port, unsigned char c)
 	spin_lock_irqsave(&i8042_lock, flags);
 
 	if (!(retval = i8042_wait_write())) {
-		kbd_dbg("%02x -> i8042 (kbd-data)\n", c);
+		str_dbg(0, c, "-> i8042 (kbd-data)\n", c);
 		i8042_write_data(c);
 	}
 
@@ -455,7 +439,7 @@ static bool i8042_filter(unsigned char data, unsigned char str,
 		if ((~str & I8042_STR_AUXDATA) &&
 		    (data == 0xfa || data == 0xfe)) {
 			i8042_suppress_kbd_ack--;
-			kbd_dbg("Extra keyboard ACK - filtered out\n");
+			dbg("Extra keyboard ACK - filtered out\n");
 			return true;
 		}
 	}
@@ -491,7 +475,7 @@ static irqreturn_t i8042_interrupt(int irq, void *dev_id)
 	if (unlikely(~str & I8042_STR_OBF)) {
 		spin_unlock_irqrestore(&i8042_lock, flags);
 		if (irq)
-			str_dbg(str, "Interrupt %d, without any data\n", irq);
+			dbg("Interrupt %d, without any data\n", irq);
 		ret = 0;
 		goto out;
 	}
@@ -548,11 +532,10 @@ static irqreturn_t i8042_interrupt(int irq, void *dev_id)
 	port = &i8042_ports[port_no];
 	serio = port->exists ? port->serio : NULL;
 
-	port_dbg(port_no,
-		 "%02x <- i8042 (interrupt, %d, %d%s%s)\n",
-		 data, port_no, irq,
-		 dfl & SERIO_PARITY ? ", bad parity" : "",
-		 dfl & SERIO_TIMEOUT ? ", timeout" : "");
+	str_dbg(str, data, "<- i8042 (interrupt, %d, %d%s%s)\n",
+		port_no, irq,
+		dfl & SERIO_PARITY ? ", bad parity" : "",
+		dfl & SERIO_TIMEOUT ? ", timeout" : "");
 
 	filtered = i8042_filter(data, str, serio);
 
@@ -713,8 +696,8 @@ static irqreturn_t __init i8042_aux_test_irq(int irq, void *dev_id)
 	str = i8042_read_status();
 	if (str & I8042_STR_OBF) {
 		data = i8042_read_data();
-		str_dbg(str, "%02x <- i8042 (aux_test_irq, %s)\n",
-			data, str & I8042_STR_AUXDATA ? "aux" : "kbd");
+		str_dbg(str, data, "<- i8042 (aux_test_irq, %s)\n",
+			str & I8042_STR_AUXDATA ? "aux" : "kbd");
 		if (i8042_irq_being_tested &&
 		    data == 0xa5 && (str & I8042_STR_AUXDATA))
 			complete(&i8042_aux_irq_delivered);
