@@ -142,6 +142,33 @@ static irqreturn_t i8042_interrupt(int irq, void *dev_id);
 static bool (*i8042_platform_filter)(unsigned char data, unsigned char str,
 				     struct serio *serio);
 
+#ifdef DEBUG
+static inline void str_dbg(unsigned char str, unsigned char data,
+			   const char *format, ...)
+{
+	va_list args;
+
+	if (!i8042_debug)
+		return;
+
+	printk(KERN_DEBUG KBUILD_MODNAME ": [%d] ",
+	       (int)(jiffies - i8042_start_time));
+
+	if (str & I8042_STR_AUXDATA || i8042_debug_kbd)
+		printk("%02x ", data);
+	else
+		printk("** ");
+
+	va_start(args, format);
+	vprintk(format, args);
+	va_end(args);
+}
+#else
+static inline void str_dbg(unsigned char str, unsigned char data,
+			   const char *format, ...)
+{ }
+#endif
+
 void i8042_lock_chip(void)
 {
 	mutex_lock(&i8042_mutex);
@@ -242,8 +269,8 @@ static int i8042_flush(void)
 		if (count++ < I8042_BUFFER_SIZE) {
 			udelay(50);
 			data = i8042_read_data();
-			str_dbg(str, data, "<- i8042 (flush, %s)\n",
-				str & I8042_STR_AUXDATA ? "aux" : "kbd");
+			dbg("%02x <- i8042 (flush, %s)\n",
+			    data, str & I8042_STR_AUXDATA ? "aux" : "kbd");
 		} else {
 			retval = -EIO;
 			break;
@@ -330,7 +357,7 @@ static int i8042_kbd_write(struct serio *port, unsigned char c)
 	spin_lock_irqsave(&i8042_lock, flags);
 
 	if (!(retval = i8042_wait_write())) {
-		str_dbg(0, c, "-> i8042 (kbd-data)\n", c);
+		dbg("%02x -> i8042 (kbd-data)\n", c);
 		i8042_write_data(c);
 	}
 
@@ -696,8 +723,8 @@ static irqreturn_t __init i8042_aux_test_irq(int irq, void *dev_id)
 	str = i8042_read_status();
 	if (str & I8042_STR_OBF) {
 		data = i8042_read_data();
-		str_dbg(str, data, "<- i8042 (aux_test_irq, %s)\n",
-			str & I8042_STR_AUXDATA ? "aux" : "kbd");
+		dbg("%02x <- i8042 (aux_test_irq, %s)\n",
+		    data, str & I8042_STR_AUXDATA ? "aux" : "kbd");
 		if (i8042_irq_being_tested &&
 		    data == 0xa5 && (str & I8042_STR_AUXDATA))
 			complete(&i8042_aux_irq_delivered);
