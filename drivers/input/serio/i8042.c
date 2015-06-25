@@ -88,6 +88,23 @@ MODULE_PARM_DESC(nopnp, "Do not use PNP to detect controller settings");
 static bool i8042_debug;
 module_param_named(debug, i8042_debug, bool, 0600);
 MODULE_PARM_DESC(debug, "Turn i8042 debugging mode on and off");
+
+static bool i8042_debug_kbd;
+module_param_named(debug_kbd, i8042_debug_kbd, bool, 0600);
+MODULE_PARM_DESC(i8042_kbd, "Turn i8042 kbd debugging output on or off");
+
+#define str_dbg(str, data, format, args...)			\
+	do {							\
+		if (!i8042_debug)				\
+			break;					\
+								\
+		if (str & I8042_STR_AUXDATA || i8042_debug_kbd)	\
+			dbg("%02x " format, data, ##args);	\
+		else						\
+			dbg("** " format, ##args);		\
+	} while (0)
+#else
+#define str_dbg(str, data, format, args...) do { } while (0)
 #endif
 
 static bool i8042_bypass_aux_irq_test;
@@ -528,10 +545,10 @@ static irqreturn_t i8042_interrupt(int irq, void *dev_id)
 	port = &i8042_ports[port_no];
 	serio = port->exists ? port->serio : NULL;
 
-	dbg("%02x <- i8042 (interrupt, %d, %d%s%s)\n",
-	    data, port_no, irq,
-	    dfl & SERIO_PARITY ? ", bad parity" : "",
-	    dfl & SERIO_TIMEOUT ? ", timeout" : "");
+	str_dbg(str, data, "<- i8042 (interrupt, %d, %d%s%s)\n",
+		port_no, irq,
+		dfl & SERIO_PARITY ? ", bad parity" : "",
+		dfl & SERIO_TIMEOUT ? ", timeout" : "");
 
 	filtered = i8042_filter(data, str, serio);
 
