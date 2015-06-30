@@ -134,6 +134,7 @@ psmouse_ret_t psmouse_process_byte(struct psmouse *psmouse)
 {
 	struct input_dev *dev = psmouse->dev;
 	unsigned char *packet = psmouse->packet;
+	u8 buttons;
 
 	if (psmouse->pktcnt < psmouse->pktsize)
 		return PSMOUSE_GOOD_DATA;
@@ -201,9 +202,10 @@ psmouse_ret_t psmouse_process_byte(struct psmouse *psmouse)
  * Generic PS/2 Mouse
  */
 
-	input_report_key(dev, BTN_LEFT,    packet[0]       & 1);
-	input_report_key(dev, BTN_MIDDLE, (packet[0] >> 2) & 1);
-	input_report_key(dev, BTN_RIGHT,  (packet[0] >> 1) & 1);
+	buttons = (packet[0] | psmouse->pt_btns) & 0x07;
+	input_report_key(dev, BTN_LEFT,    buttons       & 1);
+	input_report_key(dev, BTN_MIDDLE, (buttons >> 2) & 1);
+	input_report_key(dev, BTN_RIGHT,  (buttons >> 1) & 1);
 
 	input_report_rel(dev, REL_X, packet[1] ? (int) packet[1] - (int) ((packet[0] << 4) & 0x100) : 0);
 	input_report_rel(dev, REL_Y, packet[2] ? (int) ((packet[0] << 3) & 0x100) - (int) packet[2] : 0);
@@ -1925,6 +1927,37 @@ static int psmouse_get_maxproto(char *buffer, const struct kernel_param *kp)
 
 	return sprintf(buffer, "%s", psmouse_protocol_by_type(type)->name);
 }
+
+enum psmouse_type psmouse_get_type(struct psmouse *psmouse)
+{
+	return psmouse->type;
+}
+EXPORT_SYMBOL(psmouse_get_type);
+
+void psmouse_pt_btns_enable(struct psmouse *psmouse)
+{
+	psmouse->has_pt_btns = true;
+}
+EXPORT_SYMBOL(psmouse_pt_btns_enable);
+
+void psmouse_pt_btns_report(struct psmouse *psmouse, int code, bool value)
+{
+	psmouse->pt_btns |= (value << (BTN_LEFT - code));
+	input_report_key(psmouse->dev, code, value);
+}
+EXPORT_SYMBOL(psmouse_pt_btns_report);
+
+void psmouse_pt_btns_sync(struct psmouse *psmouse)
+{
+	input_sync(psmouse->dev);
+}
+EXPORT_SYMBOL(psmouse_pt_btns_sync);
+
+void psmouse_pt_btns_clear(struct psmouse *psmouse)
+{
+	psmouse->pt_btns = 0;
+}
+EXPORT_SYMBOL(psmouse_pt_btns_clear);
 
 static int __init psmouse_init(void)
 {
