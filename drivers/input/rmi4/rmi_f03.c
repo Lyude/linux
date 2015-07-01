@@ -196,11 +196,6 @@ static int rmi_f03_attention(struct rmi_function *fn, unsigned long *irq_bits)
 			serio_flags & SERIO_TIMEOUT ?  'Y' : 'N',
 			serio_flags & SERIO_PARITY ? 'Y' : 'N');
 
-		/* Mark the data as read */
-		*ob_status &= ~RMI_F03_RX_DATA_OFB;
-		rmi_write(fn->rmi_dev, data_addr + RMI_F03_OB_OFFSET + i,
-			  *ob_status);
-
 		serio_interrupt(f03->serio, ob_data, serio_flags);
 	}
 
