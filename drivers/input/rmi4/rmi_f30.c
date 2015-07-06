@@ -176,6 +176,7 @@ static int rmi_f30_register_device(struct rmi_function *fn)
 	struct rmi_device *rmi_dev = fn->rmi_dev;
 	struct rmi_driver_data *drv_data = dev_get_drvdata(&rmi_dev->dev);
 	struct f30_data *f30 = dev_get_drvdata(&fn->dev);
+	struct rmi_f30_data *rmi_f30 = rmi_get_platform_data(rmi_dev)->f30_data;
 	struct rmi_driver *driver = fn->rmi_dev->driver;
 	struct input_dev *input_dev;
 	int button_count = 0;
@@ -214,11 +215,19 @@ static int rmi_f30_register_device(struct rmi_function *fn)
 	input_dev->keycodesize = sizeof(u16);
 	input_dev->keycodemax = f30->gpioled_count;
 
-	for (i = 0; i < f30->gpioled_count; i++) {
-		if (f30->gpioled_key_map[i] != 0) {
-			input_set_capability(input_dev, EV_KEY,
-						f30->gpioled_key_map[i]);
-			button_count++;
+	/* Clickpads may report having more then one button in the event of
+	 * there being extra buttons that get passed to a PS/2 guest, so just
+	 * report one button capability for all clickpads */
+	if (rmi_f30->buttonpad) {
+		input_set_capability(input_dev, EV_KEY, BTN_LEFT);
+		button_count = 1;
+	} else {
+		for (i = 0; i < f30->gpioled_count; i++) {
+			if (f30->gpioled_key_map[i] != 0) {
+				input_set_capability(input_dev, EV_KEY,
+						     f30->gpioled_key_map[i]);
+				button_count++;
+			}
 		}
 	}
 
