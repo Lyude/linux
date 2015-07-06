@@ -10,6 +10,8 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/serio.h>
+#include <linux/notifier.h>
+#include <linux/psmouse.h>
 #include "rmi_driver.h"
 
 #define RMI_F03_TX_DATA_STATUS		(1 << 7)
@@ -42,6 +44,8 @@ struct f03_data {
 
 	u8 resend_count;
 };
+
+static struct notifier_block rmi_f03_drv_bind_notifier_block;
 
 static int rmi_f03_pt_write(struct serio *id, unsigned char val)
 {
@@ -104,7 +108,7 @@ static inline int rmi_f03_register_pt(struct rmi_function *fn)
 	if (!serio)
 		return -ENOMEM;
 
-	serio->id.type = SERIO_8042;
+	serio->id.type = SERIO_RMI_PSTHRU;
 	serio->write = rmi_f03_pt_write;
 	serio->port_data = f03;
 
@@ -116,6 +120,11 @@ static inline int rmi_f03_register_pt(struct rmi_function *fn)
 	f03->serio = serio;
 
 	serio_register_port(serio);
+
+	if (f03->device_has_buttons) {
+		bus_register_notifier(serio->dev.bus,
+				      &rmi_f03_drv_bind_notifier_block);
+	}
 
 	return 0;
 }
@@ -206,8 +215,12 @@ static void rmi_f03_remove(struct rmi_function *fn)
 {
 	struct f03_data *f03 = dev_get_drvdata(&fn->dev);
 
-	if (f03->serio)
+	if (f03->serio) {
+		bus_unregister_notifier(f03->serio->dev.bus,
+					&rmi_f03_drv_bind_notifier_block);
+
 		serio_unregister_port(f03->serio);
+	}
 }
 
 static struct rmi_function_handler rmi_f03_handler = {
@@ -219,6 +232,43 @@ static struct rmi_function_handler rmi_f03_handler = {
 	.config = rmi_f03_config,
 	.attention = rmi_f03_attention,
 	.remove = rmi_f03_remove,
+};
+
+static int rmi_f03_drv_bind_notifier(struct notifier_block *nb,
+				     unsigned long action, void *data)
+{
+	struct device *dev = data;
+	struct serio *serio = to_serio_port(dev);
+	struct f03_data *f03 = serio->port_data;
+	struct rmi_driver_data *drv_data =
+		dev_get_drvdata(&f03->fn->rmi_dev->dev);
+	struct psmouse *psmouse = serio_get_drvdata(serio);
+
+	if (serio->id.type != SERIO_RMI_PSTHRU)
+		return 0;
+
+	switch (action) {
+	case BUS_NOTIFY_BOUND_DRIVER:
+		if (psmouse->type == PSMOUSE_TRACKPOINT) {
+			dev_dbg(&f03->fn->dev,
+				"%s: PS/2 TrackPoint with buttons detected on passthrough, forwarding non-primary button events to it\n",
+				__func__);
+
+			psmouse->has_pt_btns = true;
+			drv_data->ps2_guest = psmouse;
+		}
+
+		break;
+	case BUS_NOTIFY_UNBOUND_DRIVER:
+		drv_data->ps2_guest = NULL;
+		break;
+	}
+
+	return 0;
+}
+
+static struct notifier_block rmi_f03_drv_bind_notifier_block = {
+	.notifier_call = rmi_f03_drv_bind_notifier
 };
 
 int __init rmi_register_f03_handler(void)

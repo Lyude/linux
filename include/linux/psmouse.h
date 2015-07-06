@@ -53,6 +53,9 @@ struct psmouse {
 	unsigned int resync_time;
 	bool smartscroll;	/* Logitech only */
 
+	bool has_pt_btns;	/* Trackpoints only */
+	u8 pt_btns;
+
 	psmouse_ret_t (*protocol_handler)(struct psmouse *psmouse);
 	void (*set_rate)(struct psmouse *psmouse, unsigned int rate);
 	void (*set_resolution)(struct psmouse *psmouse, unsigned int resolution);

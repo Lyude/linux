@@ -197,13 +197,24 @@ psmouse_ret_t psmouse_process_byte(struct psmouse *psmouse)
 		packet[0] |= 0x08;
 	}
 
+/* Physical trackpoint buttons on Trackpoints using PS/2 over RMI4 where the
+ * buttons are reported through the touchpad as opposed to the trackpoint
+ */
+	if (psmouse->type == PSMOUSE_TRACKPOINT && psmouse->has_pt_btns) {
+		input_report_key(dev, BTN_LEFT,    psmouse->pt_btns       & 1);
+		input_report_key(dev, BTN_MIDDLE, (psmouse->pt_btns >> 2) & 1);
+		input_report_key(dev, BTN_RIGHT,  (psmouse->pt_btns >> 1) & 1);
+	}
+
 /*
  * Generic PS/2 Mouse
  */
 
-	input_report_key(dev, BTN_LEFT,    packet[0]       & 1);
-	input_report_key(dev, BTN_MIDDLE, (packet[0] >> 2) & 1);
-	input_report_key(dev, BTN_RIGHT,  (packet[0] >> 1) & 1);
+	else {
+		input_report_key(dev, BTN_LEFT,    packet[0]       & 1);
+		input_report_key(dev, BTN_MIDDLE, (packet[0] >> 2) & 1);
+		input_report_key(dev, BTN_RIGHT,  (packet[0] >> 1) & 1);
+	}
 
 	input_report_rel(dev, REL_X, packet[1] ? (int) packet[1] - (int) ((packet[0] << 4) & 0x100) : 0);
 	input_report_rel(dev, REL_Y, packet[2] ? (int) ((packet[0] << 3) & 0x100) - (int) packet[2] : 0);
@@ -1671,6 +1682,12 @@ static struct serio_device_id psmouse_serio_ids[] = {
 	},
 	{
 		.type	= SERIO_PS_PSTHRU,
+		.proto	= SERIO_ANY,
+		.id	= SERIO_ANY,
+		.extra	= SERIO_ANY,
+	},
+	{
+		.type	= SERIO_RMI_PSTHRU,
 		.proto	= SERIO_ANY,
 		.id	= SERIO_ANY,
 		.extra	= SERIO_ANY,

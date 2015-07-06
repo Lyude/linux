@@ -66,6 +66,7 @@ struct f30_data {
 	bool has_gpio_driver_control;
 	bool has_mech_mouse_btns;
 	u8 gpioled_count;
+	u8 primary_button;
 
 	u8 register_count;
 
@@ -103,11 +104,14 @@ static int rmi_f30_read_control_parameters(struct rmi_function *fn,
 static int rmi_f30_attention(struct rmi_function *fn, unsigned long *irq_bits)
 {
 	struct f30_data *f30 = dev_get_drvdata(&fn->dev);
+	struct rmi_driver_data *data = dev_get_drvdata(&fn->rmi_dev->dev);
 	int retval;
 	int gpiled = 0;
 	int value = 0;
 	int i;
 	int reg_num;
+	int primary_btn = f30->primary_button;
+	u8 pt_buttons = 0;
 
 	/* Read the gpi led data. */
 	retval = rmi_read_block(fn->rmi_dev, fn->fd.data_base_addr,
@@ -130,12 +134,33 @@ static int rmi_f30_attention(struct rmi_function *fn, unsigned long *irq_bits)
 					"%s: call input report key (0x%04x) value (0x%02x)",
 					__func__,
 					f30->gpioled_key_map[gpiled], value);
-				input_report_key(f30->input,
-					f30->gpioled_key_map[gpiled],
-					value);
+
+				/* If we have a PS/2 guest, that means any
+				 * buttons that aren't the primary button need
+				 * to be forwarded to the PS/2 guest */
+				if (i != primary_btn && data->ps2_guest) {
+					pt_buttons |= value <<
+						(f30->gpioled_key_map[gpiled] -
+						 BTN_LEFT);
+
+					input_report_key(
+						data->ps2_guest->dev,
+						f30->gpioled_key_map[gpiled],
+						value);
+				} else {
+					input_report_key(
+						f30->input,
+						f30->gpioled_key_map[gpiled],
+						value);
+				}
 			}
 
 		}
+	}
+
+	if (data->ps2_guest) {
+		data->ps2_guest->pt_btns = pt_buttons;
+		input_sync(data->ps2_guest->dev);
 	}
 
 	if (!f30->unified_input)
@@ -265,6 +290,7 @@ static inline int rmi_f30_initialize(struct rmi_function *fn)
 	u8 buf[RMI_F30_QUERY_SIZE];
 	u8 *ctrl_reg;
 	u8 *map_memory;
+	bool mapping_pt_buttons = false;
 
 	f30 = devm_kzalloc(&fn->dev, sizeof(struct f30_data),
 			   GFP_KERNEL);
@@ -380,18 +406,31 @@ static inline int rmi_f30_initialize(struct rmi_function *fn)
 		int button = BTN_LEFT;
 		if (!pdata->gpioled_map) {
 			for (i = 0; i < f30->gpioled_count; i++) {
+				/* If we have a buttonpad reporting more then
+				 * one button, we assume each additional button
+				 * is a button for the PS/2 guest, as such we
+				 * don't increment the button value when mapping
+				 * the first button so that the mapping for the
+				 * following buttons start back at BTN_LEFT
+				 *
+				 * We could get the buttonpad status from
+				 * f30->has_mech_mouse_btns but we're not
+				 * entirely sure yet, so we'll rely on pdata */
 				if (rmi_f30_is_valid_button(i, f30->ctrl)) {
-					f30->gpioled_key_map[i] = button++;
-					f30->gpioled_sense_map[i] = 0;
+					if (button == BTN_LEFT &&
+					    pdata->f30_data &&
+					    pdata->f30_data->buttonpad &&
+					    !mapping_pt_buttons) {
+						mapping_pt_buttons = true;
+						f30->primary_button = i;
+						f30->gpioled_key_map[i] =
+							button;
+					} else {
+						f30->gpioled_key_map[i] =
+							button++;
+					}
 
-					/*
-					 * buttonpad might be given by
-					 * f30->has_mech_mouse_btns, but I am
-					 * not sure so use only the pdata info
-					 */
-					if (pdata->f30_data &&
-					    pdata->f30_data->buttonpad)
-						break;
+					f30->gpioled_sense_map[i] = 0;
 				}
 			}
 		} else if (!pdata->gpioled_map->map) {
