@@ -42,6 +42,8 @@ static LIST_HEAD(ftrace_common_fields);
 static struct kmem_cache *field_cachep;
 static struct kmem_cache *file_cachep;
 
+static char bootup_event_buf[COMMAND_LINE_SIZE];
+
 static inline int system_refcount(struct event_subsystem *system)
 {
 	return system->ref_count;
@@ -2477,6 +2479,26 @@ int trace_remove_event_call(struct trace_event_call *call)
 
 #ifdef CONFIG_MODULES
 
+static void enable_late_events(struct trace_array *tr)
+{
+	char *buf = bootup_event_buf;
+	char *token;
+
+	while (true) {
+		token = strsep(&buf, ",");
+
+		if (!token)
+			break;
+
+		if (*token)
+			ftrace_set_clr_event_nolock(tr, token, 1);
+
+		/* Put back the comma to allow this to be called again */
+		if (buf)
+			*(buf - 1) = ',';
+	}
+}
+
 static void trace_module_add_events(struct module *mod)
 {
 	struct trace_event_call **call, **start, **end;
@@ -2498,6 +2520,8 @@ static void trace_module_add_events(struct module *mod)
 		__register_event(*call, mod);
 		__add_event_to_tracers(*call);
 	}
+
+	enable_late_events(top_trace_array());
 }
 
 static void trace_module_remove_events(struct module *mod)
@@ -2926,8 +2950,6 @@ static void __add_event_to_tracers(struct trace_event_call *call)
 
 extern struct trace_event_call *__start_ftrace_events[];
 extern struct trace_event_call *__stop_ftrace_events[];
-
-static char bootup_event_buf[COMMAND_LINE_SIZE] __initdata;
 
 static __init int setup_trace_event(char *str)
 {
