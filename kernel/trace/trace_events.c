@@ -750,34 +750,62 @@ static int __ftrace_set_clr_event(struct trace_array *tr, const char *match,
 	return ret;
 }
 
+static void parse_event_buf(char *buf, char **match, char **sub, char **event)
+{
+	*sub = NULL;
+	*event = NULL;
+
+	*match = strsep(&buf, ":");
+
+	/*
+	 * The buf format can be <*subsystem>:<*event-name>
+	 *  *:<*event-name> means any *event by that name.
+	 *  :<*event-name> is the same.
+	 *
+	 *  <*subsystem>:* means all *events in that *subsystem
+	 *  <*subsystem>: means the same.
+	 *
+	 *  <name> (no ':') means all *events in a *subsystem with
+	 *  the name <name> or any *event that matches <name>
+	 */
+
+	if (buf) {
+		*sub = *match;
+		*event = buf;
+		*match = NULL;
+
+		if (!strlen(*sub) || strcmp(*sub, "*") == 0)
+			*sub = NULL;
+		if (!strlen(*event) || strcmp(*event, "*") == 0)
+			*event = NULL;
+	}
+}
+
+static int
+ftrace_set_clr_event_nolock(struct trace_array *tr, char *buf, int set)
+{
+	char *event, *sub, *match;
+	int ret;
+
+	WARN_ON(!mutex_is_locked(&event_mutex));
+
+	parse_event_buf(buf, &match, &sub, &event);
+
+	ret = __ftrace_set_clr_event_nolock(tr, match, sub, event, set);
+
+	/* Put back the colon to allow this to be called again */
+	if (buf)
+		*(buf - 1) = ':';
+
+	return ret;
+}
+
 static int ftrace_set_clr_event(struct trace_array *tr, char *buf, int set)
 {
 	char *event = NULL, *sub = NULL, *match;
 	int ret;
 
-	/*
-	 * The buf format can be <subsystem>:<event-name>
-	 *  *:<event-name> means any event by that name.
-	 *  :<event-name> is the same.
-	 *
-	 *  <subsystem>:* means all events in that subsystem
-	 *  <subsystem>: means the same.
-	 *
-	 *  <name> (no ':') means all events in a subsystem with
-	 *  the name <name> or any event that matches <name>
-	 */
-
-	match = strsep(&buf, ":");
-	if (buf) {
-		sub = match;
-		event = buf;
-		match = NULL;
-
-		if (!strlen(sub) || strcmp(sub, "*") == 0)
-			sub = NULL;
-		if (!strlen(event) || strcmp(event, "*") == 0)
-			event = NULL;
-	}
+	parse_event_buf(buf, &match, &sub, &event);
 
 	ret = __ftrace_set_clr_event(tr, match, sub, event, set);
 
