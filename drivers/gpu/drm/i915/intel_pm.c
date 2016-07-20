@@ -2853,6 +2853,174 @@ bool ilk_disable_lp_wm(struct drm_device *dev)
 #define SKL_DDB_SIZE		896	/* in blocks */
 #define BXT_DDB_SIZE		512
 
+#define SET_INDENT()               \
+	char indent_str[64];             \
+                                          \
+	memset(indent_str, ' ', sizeof(indent_str)); \
+	indent_str[indent] = '\0'
+
+#define ADD_INDENT(additional_indent) \
+	/* Clear the current indent */ \
+	indent_str[indent] = ' ';      \
+                                       \
+	indent += additional_indent;   \
+	indent_str[indent] = '\0'
+
+#define SUB_INDENT(indent_to_remove) \
+	indent_str[indent] = ' ';    \
+	indent -= indent_to_remove;  \
+	indent_str[indent] = '\0'
+
+#define _P(fmt, ...) \
+	printk("%s" fmt, indent_str, ##__VA_ARGS__)
+
+void
+dump_skl_ddb_alloc(struct drm_device *dev,
+		   const struct skl_ddb_allocation *ddb,
+		   enum pipe pipe,
+		   int indent)
+{
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	const struct skl_ddb_entry *e;
+	int plane;
+
+	SET_INDENT();
+
+	_P("DDB allocation for pipe %c:\n", pipe_name(pipe));
+
+	ADD_INDENT(2);
+	e = &ddb->pipe[pipe];
+	_P("Pipe allocation: %d - %d (%d)\n",
+	   e->start, e->end, e->end - e->start);
+
+	ADD_INDENT(2);
+	for (plane = 0; plane < intel_num_planes(intel_crtc); plane++) {
+		e = &ddb->plane[pipe][plane];
+
+		_P("Plane %d: %d - %d\n", plane,
+		   e->start, e->end, e->end - e->start);
+	}
+
+	e = &ddb->plane[pipe][PLANE_CURSOR];
+	_P("Cursor plane: %d - %d (%d)\n",
+	   e->start, e->end, e->end - e->start);
+
+	for (plane = 0; plane < intel_num_planes(intel_crtc); plane++) {
+		e = &ddb->y_plane[pipe][plane];
+
+		_P("Y plane %d: %d - %d (%d)\n", plane,
+		   e->start, e->end, e->end - e->start);
+	}
+
+}
+
+void
+dump_skl_wm_values(struct drm_device *dev,
+		   const struct skl_wm_values *wm,
+		   enum pipe pipe)
+{
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	int level, max_level = ilk_wm_max_level(dev);
+	int plane;
+	int indent = 0;
+
+	SET_INDENT();
+
+	_P("Dumping WM values for pipe %c:\n", pipe_name(pipe));
+
+	ADD_INDENT(2);
+	_P("Linetime: %d\n", wm->wm_linetime[pipe]);
+
+	for (plane = 0; plane < intel_num_planes(intel_crtc); plane++) {
+		_P("Plane %d:\n", plane);
+		ADD_INDENT(2);
+
+		_P("WM:\n");
+		ADD_INDENT(2);
+
+		for (level = 0; level <= max_level; level++) {
+			_P("Level %d: 0x%x\n",
+			   level, wm->plane[pipe][plane][level]);
+		}
+		SUB_INDENT(2);
+
+		_P("Transition WM: 0x%x\n", wm->plane_trans[pipe][plane]);
+		dump_skl_ddb_alloc(dev, &wm->ddb, pipe, indent);
+
+		SUB_INDENT(2);
+	}
+}
+
+void
+dump_skl_wm_level(struct drm_device *dev,
+		  const struct skl_wm_level *wm_level,
+		  int indent)
+{
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	int plane_count = ARRAY_SIZE(wm_level->plane_en);
+	int plane;
+
+	SET_INDENT();
+
+	_P("Enabled planes: [ ");
+	for (plane = 0; plane < plane_count; plane++) {
+		if (wm_level->plane_en[plane])
+			printk("%d ", plane);
+	}
+	printk("]\n");
+
+	for (plane = 0; plane < plane_count; plane++) {
+		if (!wm_level->plane_en[plane])
+			continue;
+
+		_P("Plane %d:\n", plane);
+
+		ADD_INDENT(2);
+		_P("Lines: %u\n", wm_level->plane_res_l[plane]);
+		_P("Blocks: %u\n", wm_level->plane_res_b[plane]);
+		SUB_INDENT(2);
+	}
+}
+
+void
+dump_skl_pipe_wm(struct drm_device *dev,
+		 const struct skl_pipe_wm *wm,
+		 enum pipe pipe)
+{
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	int level, max_level = ilk_wm_max_level(dev);
+	int plane;
+	int indent = 0;
+
+	SET_INDENT();
+
+	_P("Dumping pipe WM for pipe %c:\n", pipe_name(pipe));
+	ADD_INDENT(2);
+
+	_P("Linetime: %u\n", wm->linetime);
+
+	_P("WM levels:\n");
+
+	ADD_INDENT(2);
+	for (level = 0; level < max_level; level++) {
+		_P("Level %d\n", level);
+
+		ADD_INDENT(2);
+		dump_skl_wm_level(dev, wm->wm, indent);
+		SUB_INDENT(2);
+	}
+	SUB_INDENT(2);
+
+	_P("Trans WM:\n");
+
+	ADD_INDENT(2);
+	dump_skl_wm_level(dev, &wm->trans_wm, indent);
+}
+
 /*
  * Return the index of a plane in the SKL DDB and wm result arrays.  Primary
  * plane is always in slot 0, cursor is always in slot I915_MAX_PLANES-1, and
