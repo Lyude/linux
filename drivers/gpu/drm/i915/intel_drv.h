@@ -1667,6 +1667,21 @@ enable_rpm_wakeref_asserts(struct drm_i915_private *dev_priv)
 	atomic_dec(&dev_priv->pm.wakeref_count);
 }
 
+/* Lyude dump functions, put here to prevent merge conflicts */
+void dump_skl_ddb_alloc(struct drm_device *dev,
+			const struct skl_ddb_allocation *ddb,
+			enum pipe pipe,
+			int indent);
+void dump_skl_wm_values(struct drm_device *dev,
+			const struct skl_wm_values *wm,
+			enum pipe pipe);
+void dump_skl_wm_level(struct drm_device *dev,
+		       const struct skl_wm_level *wm_level,
+		       int indent);
+void dump_skl_pipe_wm(struct drm_device *dev,
+		      const struct skl_pipe_wm *wm,
+		      enum pipe pipe);
+
 void intel_runtime_pm_get(struct drm_i915_private *dev_priv);
 bool intel_runtime_pm_get_if_in_use(struct drm_i915_private *dev_priv);
 void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv);
