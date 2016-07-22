@@ -3076,7 +3076,7 @@ skl_sagv_get_hw_state(struct drm_i915_private *dev_priv)
  * full system hangs), and the bspec also suggests that software disable it
  * when more then one pipe is enabled.
  */
-static int
+int
 skl_enable_sagv(struct drm_i915_private *dev_priv)
 {
 	int ret;
@@ -3101,7 +3101,7 @@ skl_enable_sagv(struct drm_i915_private *dev_priv)
 	return ret;
 }
 
-static int
+int
 skl_disable_sagv(struct drm_i915_private *dev_priv)
 {
 	int ret = 0;
@@ -3969,6 +3969,14 @@ void skl_write_plane_wm(struct intel_crtc *intel_crtc,
 			   wm->plane[pipe][plane][level]);
 	}
 	I915_WRITE(PLANE_WM_TRANS(pipe, plane), wm->plane_trans[pipe][plane]);
+
+	/* XXX: Maybe move this single write into skl_update_crtcs()? */
+	I915_WRITE(PIPE_WM_LINETIME(pipe), wm->wm_linetime[pipe]);
+
+	skl_ddb_entry_write(dev_priv, PLANE_BUF_CFG(pipe, plane),
+			    &wm->ddb.plane[pipe][plane]);
+	skl_ddb_entry_write(dev_priv, PLANE_NV12_BUF_CFG(pipe, plane),
+			    &wm->ddb.y_plane[pipe][plane]);
 }
 
 void skl_write_cursor_wm(struct intel_crtc *intel_crtc)
@@ -3988,42 +3996,6 @@ void skl_write_cursor_wm(struct intel_crtc *intel_crtc)
 			   wm->plane[pipe][PLANE_CURSOR][level]);
 	}
 	I915_WRITE(CUR_WM_TRANS(pipe), wm->plane_trans[pipe][PLANE_CURSOR]);
-}
-
-static void skl_write_wm_values(struct drm_i915_private *dev_priv,
-				const struct skl_wm_values *new)
-{
-	struct drm_device *dev = &dev_priv->drm;
-	struct intel_crtc *crtc;
-
-	if (dev_priv->active_crtcs == 1)
-		skl_enable_sagv(dev_priv);
-	else
-		skl_disable_sagv(dev_priv);
-
-	for_each_intel_crtc(dev, crtc) {
-		int i;
-		enum pipe pipe = crtc->pipe;
-
-		if ((new->dirty_pipes & drm_crtc_mask(&crtc->base)) == 0)
-			continue;
-		if (!crtc->active)
-			continue;
-
-		I915_WRITE(PIPE_WM_LINETIME(pipe), new->wm_linetime[pipe]);
-
-		for (i = 0; i < intel_num_planes(crtc); i++) {
-			skl_ddb_entry_write(dev_priv,
-					    PLANE_BUF_CFG(pipe, i),
-					    &new->ddb.plane[pipe][i]);
-			skl_ddb_entry_write(dev_priv,
-					    PLANE_NV12_BUF_CFG(pipe, i),
-					    &new->ddb.y_plane[pipe][i]);
-		}
-
-		skl_ddb_entry_write(dev_priv, CUR_BUF_CFG(pipe),
-				    &new->ddb.plane[pipe][PLANE_CURSOR]);
-	}
 }
 
 /*
@@ -4064,7 +4036,7 @@ skl_wm_flush_pipe(struct drm_i915_private *dev_priv, enum pipe pipe, int pass)
 	I915_WRITE(CURBASE(pipe), I915_READ(CURBASE(pipe)));
 }
 
-static bool
+bool
 skl_ddb_allocation_included(const struct skl_ddb_allocation *old,
 			    const struct skl_ddb_allocation *new,
 			    enum pipe pipe)
@@ -4077,93 +4049,6 @@ skl_ddb_allocation_included(const struct skl_ddb_allocation *old,
 	return old_size != new_size &&
 	       new->pipe[pipe].start >= old->pipe[pipe].start &&
 	       new->pipe[pipe].end <= old->pipe[pipe].end;
-}
-
-static void skl_flush_wm_values(struct drm_i915_private *dev_priv,
-				struct skl_wm_values *new_values)
-{
-	struct drm_device *dev = &dev_priv->drm;
-	struct skl_ddb_allocation *cur_ddb, *new_ddb;
-	bool reallocated[I915_MAX_PIPES] = {};
-	struct intel_crtc *crtc;
-	enum pipe pipe;
-
-	new_ddb = &new_values->ddb;
-	cur_ddb = &dev_priv->wm.skl_hw.ddb;
-
-	/* We only ever need to flush when the ddb allocations change */
-	if (!new_values->ddb_changed)
-		return;
-
-	new_values->ddb_changed = false;
-
-	/*
-	 * First pass: flush the pipes with the new allocation contained into
-	 * the old space.
-	 *
-	 * We'll wait for the vblank on those pipes to ensure we can safely
-	 * re-allocate the freed space without this pipe fetching from it.
-	 */
-	for_each_intel_crtc(dev, crtc) {
-		if (!crtc->active)
-			continue;
-
-		pipe = crtc->pipe;
-
-		if (!skl_ddb_allocation_included(cur_ddb, new_ddb, pipe))
-			continue;
-
-		skl_wm_flush_pipe(dev_priv, pipe, 1);
-		intel_wait_for_vblank(dev, pipe);
-
-		reallocated[pipe] = true;
-	}
-
-	/*
-	 * Second pass: flush the pipes that are having their allocation
-	 * reduced, but overlapping with a previous allocation.
-	 *
-	 * Here as well we need to wait for the vblank to make sure the freed
-	 * space is not used anymore.
-	 */
-	for_each_intel_crtc(dev, crtc) {
-		if (!crtc->active)
-			continue;
-
-		pipe = crtc->pipe;
-
-		if (reallocated[pipe])
-			continue;
-
-		if (skl_ddb_entry_size(&new_ddb->pipe[pipe]) <
-		    skl_ddb_entry_size(&cur_ddb->pipe[pipe])) {
-			skl_wm_flush_pipe(dev_priv, pipe, 2);
-			intel_wait_for_vblank(dev, pipe);
-			reallocated[pipe] = true;
-		}
-	}
-
-	/*
-	 * Third pass: flush the pipes that got more space allocated.
-	 *
-	 * We don't need to actively wait for the update here, next vblank
-	 * will just get more DDB space with the correct WM values.
-	 */
-	for_each_intel_crtc(dev, crtc) {
-		if (!crtc->active)
-			continue;
-
-		pipe = crtc->pipe;
-
-		/*
-		 * At this point, only the pipes more space than before are
-		 * left to re-allocate.
-		 */
-		if (reallocated[pipe])
-			continue;
-
-		skl_wm_flush_pipe(dev_priv, pipe, 3);
-	}
 }
 
 static int skl_update_pipe_wm(struct drm_crtc_state *cstate,
@@ -4376,8 +4261,8 @@ static void skl_update_wm(struct drm_crtc *crtc)
 
 	mutex_lock(&dev_priv->wm.wm_mutex);
 
-	skl_write_wm_values(dev_priv, results);
-	skl_flush_wm_values(dev_priv, results);
+	/*skl_write_wm_values(dev_priv, results);*/
+	/*skl_flush_wm_values(dev_priv, results);*/
 
 	/*
 	 * Store the new configuration (but only for the pipes that have
