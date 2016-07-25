@@ -13706,8 +13706,17 @@ static void skl_update_crtcs(struct drm_atomic_state *state,
 		if (!skl_ddb_allocation_included(cur_ddb, new_ddb, pipe))
 			continue;
 
-		intel_update_crtc(crtc, state, old_crtc_state,
-				  crtc_vblank_mask);
+		if (needs_modeset(crtc->state)) {
+			intel_update_crtc(crtc, state, old_crtc_state,
+					  crtc_vblank_mask);
+		} else if (intel_state->wm_results.dirty_pipes & drm_crtc_mask(crtc)) {
+			skl_write_pipe_wm(intel_crtc);
+		}
+
+		/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		 * FIXME: Vblank wait needed here
+		 * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		 */
 
 		reallocated[pipe] = true;
 	}
@@ -13725,8 +13734,17 @@ static void skl_update_crtcs(struct drm_atomic_state *state,
 
 		if (skl_ddb_entry_size(&new_ddb->pipe[pipe]) <
 		    skl_ddb_entry_size(&cur_ddb->pipe[pipe])) {
-			intel_update_crtc(crtc, state, old_crtc_state,
-					  crtc_vblank_mask);
+			if (needs_modeset(crtc->state)) {
+				intel_update_crtc(crtc, state, old_crtc_state,
+						  crtc_vblank_mask);
+			} else if (intel_state->wm_results.dirty_pipes & drm_crtc_mask(crtc)) {
+				skl_write_pipe_wm(intel_crtc);
+			}
+
+			/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			 * FIXME: Vblank wait needed here
+			 * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			 */
 
 			reallocated[pipe] = true;
 		}
@@ -13740,8 +13758,12 @@ static void skl_update_crtcs(struct drm_atomic_state *state,
 		if (!crtc->state->active || reallocated[pipe])
 			continue;
 
-		intel_update_crtc(crtc, state, old_crtc_state,
-				  crtc_vblank_mask);
+		if (needs_modeset(crtc->state)) {
+			intel_update_crtc(crtc, state, old_crtc_state,
+					  crtc_vblank_mask);
+		} else if (intel_state->wm_results.dirty_pipes & drm_crtc_mask(crtc)) {
+			skl_write_pipe_wm(intel_crtc);
+		}
 	}
 }
 

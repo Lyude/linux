@@ -1731,6 +1731,7 @@ bool skl_ddb_allocation_included(const struct skl_ddb_allocation *old,
 				 enum pipe pipe);
 void skl_write_cursor_wm(struct intel_crtc *intel_crtc);
 void skl_write_plane_wm(struct intel_crtc *intel_crtc, int plane);
+void skl_write_pipe_wm(struct intel_crtc *intel_crtc);
 uint32_t ilk_pipe_pixel_rate(const struct intel_crtc_state *pipe_config);
 bool ilk_disable_lp_wm(struct drm_device *dev);
 int sanitize_rc6_option(struct drm_i915_private *dev_priv, int enable_rc6);

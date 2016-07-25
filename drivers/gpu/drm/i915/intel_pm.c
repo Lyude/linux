@@ -3977,6 +3977,9 @@ void skl_write_plane_wm(struct intel_crtc *intel_crtc,
 			    &wm->ddb.plane[pipe][plane]);
 	skl_ddb_entry_write(dev_priv, PLANE_NV12_BUF_CFG(pipe, plane),
 			    &wm->ddb.y_plane[pipe][plane]);
+	if (plane == 0)
+		skl_ddb_entry_write(dev_priv, CUR_BUF_CFG(pipe),
+				    &wm->ddb.plane[pipe][PLANE_CURSOR]);
 }
 
 void skl_write_cursor_wm(struct intel_crtc *intel_crtc)
@@ -3996,6 +3999,22 @@ void skl_write_cursor_wm(struct intel_crtc *intel_crtc)
 			   wm->plane[pipe][PLANE_CURSOR][level]);
 	}
 	I915_WRITE(CUR_WM_TRANS(pipe), wm->plane_trans[pipe][PLANE_CURSOR]);
+}
+
+void skl_write_pipe_wm(struct intel_crtc *intel_crtc)
+{
+	struct drm_i915_private *dev_priv = to_i915(intel_crtc->base.dev);
+	enum pipe pipe = intel_crtc->pipe;
+	int plane;
+
+	for (plane = 0; plane < intel_num_planes(intel_crtc); plane++) {
+		skl_write_plane_wm(intel_crtc, plane);
+		I915_WRITE(PLANE_SURF(pipe, plane),
+			   I915_READ(PLANE_SURF(pipe, plane)));
+	}
+
+	skl_write_cursor_wm(intel_crtc);
+	I915_WRITE(CURBASE(pipe), I915_READ(CURBASE(pipe)));
 }
 
 /*
