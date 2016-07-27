@@ -4882,9 +4882,9 @@ static void haswell_crtc_enable(struct drm_crtc *crtc)
 	if (!transcoder_is_dsi(cpu_transcoder))
 		intel_ddi_enable_pipe_clock(intel_crtc);
 
-	if (INTEL_INFO(dev)->gen >= 9)
+	if (INTEL_INFO(dev)->gen >= 9) {
 		skylake_pfit_enable(intel_crtc);
-	else
+	} else
 		ironlake_pfit_enable(intel_crtc);
 
 	/*
@@ -13727,6 +13727,12 @@ static void intel_atomic_commit_tail(struct drm_atomic_state *state)
 		intel_modeset_verify_disabled(dev);
 	}
 
+	/* SKL+: Prepare the ddb allocation so the spot we'll be using for new
+	 * pipes is empty
+	 */
+	if (dev_priv->display.update_ddb)
+		dev_priv->display.update_ddb(state);
+
 	/* Now enable the clocks, plane, pipe, and connectors that we set up. */
 	for_each_crtc_in_state(state, crtc, old_crtc_state, i) {
 		struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
@@ -15152,6 +15158,7 @@ void intel_init_display_hooks(struct drm_i915_private *dev_priv)
 			haswell_crtc_compute_clock;
 		dev_priv->display.crtc_enable = haswell_crtc_enable;
 		dev_priv->display.crtc_disable = haswell_crtc_disable;
+		dev_priv->display.update_ddb = skl_update_ddbs;
 	} else if (HAS_DDI(dev_priv)) {
 		dev_priv->display.get_pipe_config = haswell_get_pipe_config;
 		dev_priv->display.get_initial_plane_config =
