@@ -16891,12 +16891,23 @@ intel_modeset_setup_hw_state(struct drm_device *dev)
 		pll->on = false;
 	}
 
-	if (IS_VALLEYVIEW(dev) || IS_CHERRYVIEW(dev))
+	if (IS_VALLEYVIEW(dev) || IS_CHERRYVIEW(dev)) {
 		vlv_wm_get_hw_state(dev);
-	else if (IS_GEN9(dev))
+	} else if (IS_GEN9(dev)) {
 		skl_wm_get_hw_state(dev);
-	else if (HAS_PCH_SPLIT(dev))
+
+		if (i915.enable_sagv != -1) {
+			if (i915.enable_sagv)
+				skl_enable_sagv(dev_priv);
+			else
+				skl_disable_sagv(dev_priv);
+
+			dev_priv->skl_sagv_status =
+				I915_SKL_SAGV_NOT_CONTROLLED;
+		}
+	} else if (HAS_PCH_SPLIT(dev)) {
 		ilk_wm_get_hw_state(dev);
+	}
 
 	for_each_intel_crtc(dev, crtc) {
 		unsigned long put_domains;
