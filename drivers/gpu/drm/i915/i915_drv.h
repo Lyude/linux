@@ -1625,14 +1625,17 @@ struct skl_ddb_allocation {
 struct skl_wm_values {
 	unsigned dirty_pipes;
 	struct skl_ddb_allocation ddb;
-	uint32_t plane[I915_MAX_PIPES][I915_MAX_PLANES][8];
-	uint32_t plane_trans[I915_MAX_PIPES][I915_MAX_PLANES];
 };
 
 struct skl_wm_level {
-	bool plane_en[I915_MAX_PLANES];
-	uint16_t plane_res_b[I915_MAX_PLANES];
-	uint8_t plane_res_l[I915_MAX_PLANES];
+	bool plane_en;
+	uint16_t plane_res_b;
+	uint8_t plane_res_l;
+};
+
+struct skl_plane_wm_values {
+	struct skl_wm_level wm[8];
+	struct skl_wm_level trans_wm;
 };
 
 /*

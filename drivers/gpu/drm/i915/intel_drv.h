@@ -461,8 +461,7 @@ struct intel_pipe_wm {
 };
 
 struct skl_pipe_wm {
-	struct skl_wm_level wm[8];
-	struct skl_wm_level trans_wm;
+	struct skl_plane_wm_values wm[I915_MAX_PLANES];
 	uint32_t linetime;
 };
 
@@ -1747,10 +1746,13 @@ int skl_disable_sagv(struct drm_i915_private *dev_priv);
 bool skl_ddb_allocation_overlaps(struct drm_atomic_state *state,
 				 struct intel_crtc *intel_crtc);
 void skl_write_cursor_wm(struct intel_crtc *intel_crtc,
-			 const struct skl_wm_values *wm);
+			 const struct skl_plane_wm_values *wm,
+			 const struct skl_ddb_allocation *ddb);
 void skl_write_plane_wm(struct intel_crtc *intel_crtc,
-			const struct skl_wm_values *wm,
+			const struct skl_plane_wm_values *wm,
+			const struct skl_ddb_allocation *ddb,
 			int plane);
+int skl_wm_plane_id(const struct intel_plane *plane);
 uint32_t ilk_pipe_pixel_rate(const struct intel_crtc_state *pipe_config);
 bool ilk_disable_lp_wm(struct drm_device *dev);
 int sanitize_rc6_option(struct drm_i915_private *dev_priv, int enable_rc6);
