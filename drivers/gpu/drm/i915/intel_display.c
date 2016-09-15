@@ -3412,7 +3412,7 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	intel_crtc->adjusted_y = src_y;
 
 	if (wm->dirty_pipes & drm_crtc_mask(&intel_crtc->base))
-		skl_write_plane_wm(intel_crtc, wm, 0);
+		skl_write_plane_wm(intel_crtc, &plane_state->wm, &wm->ddb, 0);
 
 	I915_WRITE(PLANE_CTL(pipe, 0), plane_ctl);
 	I915_WRITE(PLANE_OFFSET(pipe, 0), (src_y << 16) | src_x);
@@ -3446,14 +3446,11 @@ static void skylake_disable_primary_plane(struct drm_plane *primary,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct intel_plane_state *pstate = to_intel_plane_state(primary->state);
 	int pipe = intel_crtc->pipe;
 
-	/*
-	 * We only populate skl_results on watermark updates, and if the
-	 * plane's visiblity isn't actually changing neither is its watermarks.
-	 */
-	if (!crtc->primary->state->visible)
-		skl_write_plane_wm(intel_crtc, &dev_priv->wm.skl_results, 0);
+	skl_write_plane_wm(intel_crtc, &pstate->wm,
+			   &dev_priv->wm.skl_results.ddb, 0);
 
 	I915_WRITE(PLANE_CTL(pipe, 0), 0);
 	I915_WRITE(PLANE_SURF(pipe, 0), 0);
@@ -10803,12 +10800,16 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base,
 	int pipe = intel_crtc->pipe;
 	uint32_t cntl = 0;
 
-	if (INTEL_GEN(dev_priv) >= 9 && wm->dirty_pipes & drm_crtc_mask(crtc))
-		skl_write_cursor_wm(intel_crtc, wm);
+	if (plane_state) {
+		if (INTEL_GEN(dev_priv) >= 9 &&
+		    wm->dirty_pipes & drm_crtc_mask(crtc)) {
+			skl_write_cursor_wm(intel_crtc, &plane_state->wm,
+					    &wm->ddb);
+		}
 
-	if (plane_state && plane_state->base.visible) {
-		cntl = MCURSOR_GAMMA_ENABLE;
-		switch (plane_state->base.crtc_w) {
+		if (plane_state->base.visible) {
+			cntl = MCURSOR_GAMMA_ENABLE;
+			switch (plane_state->base.crtc_w) {
 			case 64:
 				cntl |= CURSOR_MODE_64_ARGB_AX;
 				break;
@@ -10821,16 +10822,16 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base,
 			default:
 				MISSING_CASE(plane_state->base.crtc_w);
 				return;
+			}
+			cntl |= pipe << 28; /* Connect to correct pipe */
+
+			if (HAS_DDI(dev))
+				cntl |= CURSOR_PIPE_CSC_ENABLE;
+
+			if (plane_state->base.rotation == DRM_ROTATE_180)
+				cntl |= CURSOR_ROTATE_180;
 		}
-		cntl |= pipe << 28; /* Connect to correct pipe */
-
-		if (HAS_DDI(dev))
-			cntl |= CURSOR_PIPE_CSC_ENABLE;
-
-		if (plane_state->base.rotation == DRM_ROTATE_180)
-			cntl |= CURSOR_ROTATE_180;
 	}
-
 	if (intel_crtc->cursor_cntl != cntl) {
 		I915_WRITE(CURCNTR(pipe), cntl);
 		POSTING_READ(CURCNTR(pipe));
@@ -14826,7 +14827,7 @@ static void intel_begin_crtc_commit(struct drm_crtc *crtc,
 	if (modeset)
 		return;
 
-	if (crtc->state->color_mgmt_changed || to_intel_crtc_state(crtc->state)->update_pipe) {
+	if (crtc->state->color_mgmt_changed || intel_cstate->update_pipe) {
 		intel_color_set_csc(crtc->state);
 		intel_color_load_luts(crtc->state);
 	}

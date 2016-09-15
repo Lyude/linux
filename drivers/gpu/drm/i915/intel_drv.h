@@ -396,6 +396,9 @@ struct intel_plane_state {
 
 	/* async flip related structures */
 	struct drm_i915_gem_request *wait_req;
+
+	/* Gen9+ only */
+	struct skl_plane_wm_values wm;
 };
 
 struct intel_initial_plane_config {
@@ -1747,9 +1750,11 @@ int skl_disable_sagv(struct drm_i915_private *dev_priv);
 bool skl_ddb_allocation_overlaps(struct drm_atomic_state *state,
 				 struct intel_crtc *intel_crtc);
 void skl_write_cursor_wm(struct intel_crtc *intel_crtc,
-			 const struct skl_wm_values *wm);
+			 const struct skl_plane_wm_values *wm,
+			 const struct skl_ddb_allocation *ddb);
 void skl_write_plane_wm(struct intel_crtc *intel_crtc,
-			const struct skl_wm_values *wm,
+			const struct skl_plane_wm_values *wm,
+			const struct skl_ddb_allocation *ddb,
 			int plane);
 uint32_t ilk_pipe_pixel_rate(const struct intel_crtc_state *pipe_config);
 bool ilk_disable_lp_wm(struct drm_device *dev);
