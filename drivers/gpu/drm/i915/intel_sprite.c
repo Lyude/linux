@@ -231,7 +231,7 @@ skl_update_plane(struct drm_plane *drm_plane,
 
 	plane_ctl |= skl_plane_ctl_rotation(rotation);
 
-	if (wm->dirty_pipes & drm_crtc_mask(crtc))
+	if (crtc_state->wm_changed)
 		skl_write_plane_wm(intel_crtc, &plane_state->wm, &wm->ddb,
 				   skl_wm_plane_id(intel_plane));
 

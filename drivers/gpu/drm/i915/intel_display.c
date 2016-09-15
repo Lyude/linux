@@ -3411,7 +3411,7 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	intel_crtc->adjusted_x = src_x;
 	intel_crtc->adjusted_y = src_y;
 
-	if (wm->dirty_pipes & drm_crtc_mask(&intel_crtc->base))
+	if (crtc_state->wm_changed)
 		skl_write_plane_wm(intel_crtc, &plane_state->wm, &wm->ddb, 0);
 
 	I915_WRITE(PLANE_CTL(pipe, 0), plane_ctl);
@@ -10801,8 +10801,10 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base,
 	uint32_t cntl = 0;
 
 	if (plane_state) {
-		if (INTEL_GEN(dev_priv) >= 9 &&
-		    wm->dirty_pipes & drm_crtc_mask(crtc)) {
+		const struct intel_crtc_state *cstate =
+			to_intel_crtc_state(crtc->state);
+
+		if (INTEL_GEN(dev_priv) >= 9 && cstate->wm_changed) {
 			skl_write_cursor_wm(intel_crtc, &plane_state->wm,
 					    &wm->ddb);
 		}
@@ -14259,7 +14261,7 @@ static void skl_update_crtcs(struct drm_atomic_state *state,
 			if (!skl_ddb_entry_equal(&cstate->wm.skl.ddb,
 						 &intel_crtc->hw_ddb) &&
 			    !crtc->state->active_changed &&
-			    intel_state->wm_results.dirty_pipes != updated)
+			    intel_state->wm_dirty_pipes != updated)
 				vbl_wait = true;
 
 			intel_update_crtc(crtc, state, old_crtc_state,

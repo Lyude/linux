@@ -1623,7 +1623,6 @@ struct skl_ddb_allocation {
 };
 
 struct skl_wm_values {
-	unsigned dirty_pipes;
 	struct skl_ddb_allocation ddb;
 };
 

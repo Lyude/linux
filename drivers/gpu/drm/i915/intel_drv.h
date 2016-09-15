@@ -357,6 +357,7 @@ struct intel_atomic_state {
 
 	/* Gen9+ only */
 	struct skl_wm_values wm_results;
+	unsigned int wm_dirty_pipes;
 };
 
 struct intel_plane_state {
@@ -664,6 +665,9 @@ struct intel_crtc_state {
 	bool disable_lp_wm;
 
 	struct intel_crtc_wm_state wm;
+
+	/* Gen9+ only: watermarks need updating */
+	bool wm_changed;
 
 	/* Gamma mode programmed on the pipe */
 	uint32_t gamma_mode;

@@ -3945,7 +3945,7 @@ skl_compute_ddb(struct drm_atomic_state *state)
 	 */
 	if (intel_state->active_pipe_changes) {
 		realloc_pipes = ~0;
-		intel_state->wm_results.dirty_pipes = ~0;
+		intel_state->wm_dirty_pipes = intel_state->active_crtcs;
 	}
 
 	for_each_intel_crtc_mask(dev, intel_crtc, realloc_pipes) {
@@ -4003,7 +4003,7 @@ skl_compute_wm(struct drm_atomic_state *state)
 		return 0;
 
 	/* Clear all dirty flags */
-	results->dirty_pipes = 0;
+	intel_state->wm_dirty_pipes = 0;
 
 	ret = skl_compute_ddb(state);
 	if (ret)
@@ -4023,6 +4023,7 @@ skl_compute_wm(struct drm_atomic_state *state)
 		struct intel_crtc_state *intel_cstate =
 			to_intel_crtc_state(cstate);
 
+		intel_cstate->wm_changed = false;
 		pipe_wm = &intel_cstate->wm.skl.optimal;
 		ret = skl_update_pipe_wm(cstate, &results->ddb, pipe_wm,
 					 &changed);
@@ -4030,13 +4031,15 @@ skl_compute_wm(struct drm_atomic_state *state)
 			return ret;
 
 		if (changed)
-			results->dirty_pipes |= drm_crtc_mask(crtc);
+			intel_state->wm_dirty_pipes |= drm_crtc_mask(crtc);
 
-		if ((results->dirty_pipes & drm_crtc_mask(crtc)) == 0)
+		if ((intel_state->wm_dirty_pipes & drm_crtc_mask(crtc)) == 0)
 			/* This pipe's WM's did not change */
 			continue;
 
+		intel_state->wm_dirty_pipes |= drm_crtc_mask(crtc);
 		intel_cstate->update_wm_pre = true;
+		intel_cstate->wm_changed = true;
 	}
 
 	return 0;
@@ -4053,7 +4056,7 @@ static void skl_update_wm(struct drm_crtc *crtc)
 	struct skl_pipe_wm *pipe_wm = &cstate->wm.skl.optimal;
 	enum pipe pipe = intel_crtc->pipe;
 
-	if ((results->dirty_pipes & drm_crtc_mask(crtc)) == 0)
+	if (!cstate->wm_changed)
 		return;
 
 	intel_crtc->wm.active.skl = *pipe_wm;
@@ -4154,7 +4157,6 @@ static void skl_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct skl_wm_values *hw = &dev_priv->wm.skl_hw;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	struct intel_crtc_state *cstate = to_intel_crtc_state(crtc->state);
 	struct intel_plane *intel_plane;
@@ -4191,7 +4193,12 @@ static void skl_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 	if (!intel_crtc->active)
 		return;
 
-	hw->dirty_pipes |= drm_crtc_mask(crtc);
+	cstate->wm_changed = true;
+	if (cstate->base.state) {
+		struct intel_atomic_state *state =
+			to_intel_atomic_state(cstate->base.state);
+		state->wm_dirty_pipes |= drm_crtc_mask(crtc);
+	}
 
 	active->linetime = I915_READ(PIPE_WM_LINETIME(pipe));
 }
