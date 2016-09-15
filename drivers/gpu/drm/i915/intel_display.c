@@ -3377,7 +3377,6 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc_state->base.crtc);
 	struct drm_framebuffer *fb = plane_state->base.fb;
-	const struct skl_wm_values *wm = &dev_priv->wm.skl_results;
 	int pipe = intel_crtc->pipe;
 	u32 plane_ctl;
 	unsigned int rotation = plane_state->base.rotation;
@@ -3412,7 +3411,7 @@ static void skylake_update_primary_plane(struct drm_plane *plane,
 	intel_crtc->adjusted_y = src_y;
 
 	if (crtc_state->wm_changed)
-		skl_write_plane_wm(intel_crtc, &plane_state->wm, &wm->ddb, 0);
+		skl_write_plane_wm(intel_crtc, &plane_state->wm, 0);
 
 	I915_WRITE(PLANE_CTL(pipe, 0), plane_ctl);
 	I915_WRITE(PLANE_OFFSET(pipe, 0), (src_y << 16) | src_x);
@@ -3449,8 +3448,7 @@ static void skylake_disable_primary_plane(struct drm_plane *primary,
 	struct intel_plane_state *pstate = to_intel_plane_state(primary->state);
 	int pipe = intel_crtc->pipe;
 
-	skl_write_plane_wm(intel_crtc, &pstate->wm,
-			   &dev_priv->wm.skl_results.ddb, 0);
+	skl_write_plane_wm(intel_crtc, &pstate->wm, 0);
 
 	I915_WRITE(PLANE_CTL(pipe, 0), 0);
 	I915_WRITE(PLANE_SURF(pipe, 0), 0);
@@ -10796,7 +10794,6 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	const struct skl_wm_values *wm = &dev_priv->wm.skl_results;
 	int pipe = intel_crtc->pipe;
 	uint32_t cntl = 0;
 
@@ -10804,10 +10801,8 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base,
 		const struct intel_crtc_state *cstate =
 			to_intel_crtc_state(crtc->state);
 
-		if (INTEL_GEN(dev_priv) >= 9 && cstate->wm_changed) {
-			skl_write_cursor_wm(intel_crtc, &plane_state->wm,
-					    &wm->ddb);
-		}
+		if (INTEL_GEN(dev_priv) >= 9 && cstate->wm_changed)
+			skl_write_cursor_wm(intel_crtc, &plane_state->wm);
 
 		if (plane_state->base.visible) {
 			cntl = MCURSOR_GAMMA_ENABLE;
@@ -13417,50 +13412,47 @@ static void verify_wm_state(struct drm_crtc *crtc,
 			    struct drm_crtc_state *new_state)
 {
 	struct drm_device *dev = crtc->dev;
-	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct skl_ddb_allocation hw_ddb, *sw_ddb;
-	struct skl_ddb_entry *hw_entry, *sw_entry;
+	struct skl_ddb_entry hw_entry;
+	const struct skl_ddb_entry *sw_entry;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct intel_plane *plane;
+	struct intel_plane_state *pstate;
 	const enum pipe pipe = intel_crtc->pipe;
-	int plane;
+	int id;
 
 	if (INTEL_INFO(dev)->gen < 9 || !new_state->active)
 		return;
 
-	skl_ddb_get_hw_state(dev_priv, &hw_ddb);
-	sw_ddb = &dev_priv->wm.skl_hw.ddb;
-
-	/* planes */
-	for_each_plane(dev_priv, pipe, plane) {
-		hw_entry = &hw_ddb.plane[pipe][plane];
-		sw_entry = &sw_ddb->plane[pipe][plane];
-
-		if (skl_ddb_entry_equal(hw_entry, sw_entry))
+	for_each_intel_plane_on_crtc(dev, intel_crtc, plane) {
+		if (!plane->base.state)
 			continue;
 
-		DRM_ERROR("mismatch in DDB state pipe %c plane %d "
-			  "(expected (%u,%u), found (%u,%u))\n",
-			  pipe_name(pipe), plane + 1,
-			  sw_entry->start, sw_entry->end,
-			  hw_entry->start, hw_entry->end);
-	}
+		id = skl_wm_plane_id(plane);
+		pstate = to_intel_plane_state(plane->base.state);
+		sw_entry = &pstate->wm.ddb.plane;
+		skl_ddb_get_hw_state(plane, &hw_entry);
 
-	/*
-	 * cursor
-	 * If the cursor plane isn't active, we may not have updated it's ddb
-	 * allocation. In that case since the ddb allocation will be updated
-	 * once the plane becomes visible, we can skip this check
-	 */
-	if (intel_crtc->cursor_addr) {
-		hw_entry = &hw_ddb.plane[pipe][PLANE_CURSOR];
-		sw_entry = &sw_ddb->plane[pipe][PLANE_CURSOR];
+		if (skl_ddb_entry_equal(sw_entry, &hw_entry))
+			continue;
 
-		if (!skl_ddb_entry_equal(hw_entry, sw_entry)) {
+		if (id != PLANE_CURSOR) {
+			DRM_ERROR("mismatch in DDB state pipe %c plane %d "
+				  "(expected (%u,%u), found (%u,%u))\n",
+				  pipe_name(pipe), id + 1,
+				  sw_entry->start, sw_entry->end,
+				  hw_entry.start, hw_entry.end);
+		} else if (pstate->base.visible) {
+			/*
+			 * We only care about mismatches with the cursor plane
+			 * if it's actually visible. Otherwise mismatches are
+			 * simply a result of the cursor not having been
+			 * updated yet, and can be safely ignored.
+			 */
 			DRM_ERROR("mismatch in DDB state pipe %c cursor "
 				  "(expected (%u,%u), found (%u,%u))\n",
 				  pipe_name(pipe),
 				  sw_entry->start, sw_entry->end,
-				  hw_entry->start, hw_entry->end);
+				  hw_entry.start, hw_entry.end);
 		}
 	}
 }
@@ -14519,7 +14511,6 @@ static int intel_atomic_commit(struct drm_device *dev,
 
 	drm_atomic_helper_swap_state(state, true);
 	dev_priv->wm.distrust_bios_wm = false;
-	dev_priv->wm.skl_results = intel_state->wm_results;
 	intel_shared_dpll_commit(state);
 	intel_atomic_track_fbs(state);
 

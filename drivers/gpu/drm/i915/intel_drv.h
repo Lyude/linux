@@ -356,7 +356,6 @@ struct intel_atomic_state {
 	bool skip_intermediate_wm;
 
 	/* Gen9+ only */
-	struct skl_wm_values wm_results;
 	unsigned int wm_dirty_pipes;
 };
 
@@ -1746,19 +1745,18 @@ void intel_queue_rps_boost_for_request(struct drm_i915_gem_request *req);
 void vlv_wm_get_hw_state(struct drm_device *dev);
 void ilk_wm_get_hw_state(struct drm_device *dev);
 void skl_wm_get_hw_state(struct drm_device *dev);
-void skl_ddb_get_hw_state(struct drm_i915_private *dev_priv,
-			  struct skl_ddb_allocation *ddb /* out */);
+int skl_wm_plane_id(const struct intel_plane *plane);
+void skl_ddb_get_hw_state(struct intel_plane *plane,
+			  struct skl_ddb_entry *ddb /* out */);
 bool skl_can_enable_sagv(struct drm_atomic_state *state);
 int skl_enable_sagv(struct drm_i915_private *dev_priv);
 int skl_disable_sagv(struct drm_i915_private *dev_priv);
 bool skl_ddb_allocation_overlaps(struct drm_atomic_state *state,
 				 struct intel_crtc *intel_crtc);
 void skl_write_cursor_wm(struct intel_crtc *intel_crtc,
-			 const struct skl_plane_wm_values *wm,
-			 const struct skl_ddb_allocation *ddb);
+			 const struct skl_plane_wm_values *wm);
 void skl_write_plane_wm(struct intel_crtc *intel_crtc,
 			const struct skl_plane_wm_values *wm,
-			const struct skl_ddb_allocation *ddb,
 			int plane);
 int skl_wm_plane_id(const struct intel_plane *plane);
 uint32_t ilk_pipe_pixel_rate(const struct intel_crtc_state *pipe_config);

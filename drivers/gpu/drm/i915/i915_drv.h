@@ -1618,12 +1618,8 @@ static inline bool skl_ddb_entry_equal(const struct skl_ddb_entry *e1,
 }
 
 struct skl_ddb_allocation {
-	struct skl_ddb_entry plane[I915_MAX_PIPES][I915_MAX_PLANES]; /* packed/uv */
-	struct skl_ddb_entry y_plane[I915_MAX_PIPES][I915_MAX_PLANES];
-};
-
-struct skl_wm_values {
-	struct skl_ddb_allocation ddb;
+	struct skl_ddb_entry plane;
+	struct skl_ddb_entry y_plane;
 };
 
 struct skl_wm_level {
@@ -1635,6 +1631,7 @@ struct skl_wm_level {
 struct skl_plane_wm_values {
 	struct skl_wm_level wm[8];
 	struct skl_wm_level trans_wm;
+	struct skl_ddb_allocation ddb;
 };
 
 /*
@@ -2007,17 +2004,9 @@ struct drm_i915_private {
 		 */
 		uint16_t skl_latency[8];
 
-		/*
-		 * The skl_wm_values structure is a bit too big for stack
-		 * allocation, so we keep the staging struct where we store
-		 * intermediate results here instead.
-		 */
-		struct skl_wm_values skl_results;
-
 		/* current hardware state */
 		union {
 			struct ilk_wm_values hw;
-			struct skl_wm_values skl_hw;
 			struct vlv_wm_values vlv;
 		};
 

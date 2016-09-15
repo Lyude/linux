@@ -3260,33 +3260,41 @@ static int i915_ddb_info(struct seq_file *m, void *unused)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
 	struct drm_device *dev = &dev_priv->drm;
-	struct skl_ddb_allocation *ddb;
-	struct skl_ddb_entry *entry;
-	enum pipe pipe;
-	int plane;
+	struct intel_crtc *crtc;
+	struct intel_plane *plane;
+	struct intel_plane_state *pstate;
+	const struct skl_ddb_entry *entry;
+	const struct skl_ddb_entry empty_ddb = { 0 };
 
 	if (INTEL_GEN(dev_priv) < 9)
 		return 0;
 
 	drm_modeset_lock_all(dev);
 
-	ddb = &dev_priv->wm.skl_hw.ddb;
-
 	seq_printf(m, "%-15s%8s%8s%8s\n", "", "Start", "End", "Size");
 
-	for_each_pipe(dev_priv, pipe) {
-		seq_printf(m, "Pipe %c\n", pipe_name(pipe));
+	for_each_intel_crtc(dev, crtc) {
+		seq_printf(m, "Pipe %c\n", pipe_name(crtc->pipe));
 
-		for_each_plane(dev_priv, pipe, plane) {
-			entry = &ddb->plane[pipe][plane];
-			seq_printf(m, "  Plane%-8d%8u%8u%8u\n", plane + 1,
-				   entry->start, entry->end,
-				   skl_ddb_entry_size(entry));
+		for_each_intel_plane_on_crtc(dev, crtc, plane) {
+			int id = skl_wm_plane_id(plane);
+
+			if (plane->base.state) {
+				pstate = to_intel_plane_state(plane->base.state);
+				entry = &pstate->wm.ddb.plane;
+			} else {
+				entry = &empty_ddb;
+			}
+
+			if (id != PLANE_CURSOR)
+				seq_printf(m, "  Plane%-8d%8u%8u%8u\n", id + 1,
+					   entry->start, entry->end,
+					   skl_ddb_entry_size(entry));
+			else
+				seq_printf(m, "  %-13s%8u%8u%8u\n", "Cursor",
+					   entry->start, entry->end,
+					   skl_ddb_entry_size(entry));
 		}
-
-		entry = &ddb->plane[pipe][PLANE_CURSOR];
-		seq_printf(m, "  %-13s%8u%8u%8u\n", "Cursor", entry->start,
-			   entry->end, skl_ddb_entry_size(entry));
 	}
 
 	drm_modeset_unlock_all(dev);
