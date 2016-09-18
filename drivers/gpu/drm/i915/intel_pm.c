@@ -3908,6 +3908,72 @@ pipes_modified(struct drm_atomic_state *state)
 	return ret;
 }
 
+static void
+skl_print_ddb_changes(struct drm_atomic_state *state)
+{
+	const struct drm_device *dev = state->dev;
+	const struct drm_crtc *crtc;
+	const struct intel_crtc *intel_crtc;
+	const struct drm_crtc_state *cstate;
+	const struct intel_crtc_state *intel_cstate;
+	struct intel_plane *plane;
+	struct intel_plane_state *pstate;
+	const struct skl_ddb_entry *cur_ddb, *new_ddb;
+	const struct skl_ddb_entry empty_ddb = {0};
+	enum pipe pipe;
+	int i, id;
+
+	for_each_crtc_in_state(state, crtc, cstate, i) {
+		intel_crtc = to_intel_crtc(crtc);
+		intel_cstate = to_intel_crtc_state(cstate);
+		pipe = intel_crtc->pipe;
+
+		cur_ddb = &intel_crtc->hw_ddb;
+		new_ddb = &intel_cstate->wm.skl.ddb;
+
+		if (!skl_ddb_entry_equal(cur_ddb, new_ddb)) {
+			DRM_DEBUG_KMS("[CRTC:%d:pipe %c] DDB: (%3d - %3d) -> (%3d - %3d)\n",
+				      crtc->base.id, pipe_name(pipe),
+				      cur_ddb->start, cur_ddb->end,
+				      new_ddb->start, new_ddb->end);
+		}
+
+		for_each_intel_plane_on_crtc(dev, intel_crtc, plane) {
+			pstate = intel_atomic_get_existing_plane_state(
+			    state, plane);
+			if (!pstate)
+				continue;
+
+			id = skl_wm_plane_id(plane);
+			new_ddb = &pstate->wm.ddb.plane;
+
+			if (plane->base.state) {
+				pstate = to_intel_plane_state(plane->base.state);
+				cur_ddb = &pstate->wm.ddb.plane;
+			} else {
+				cur_ddb = &empty_ddb;
+			}
+
+			if (skl_ddb_entry_equal(cur_ddb, new_ddb))
+				continue;
+
+			if (id != PLANE_CURSOR) {
+				DRM_DEBUG_KMS("[PLANE:%d:plane %d%c] DDB: (%3d - %3d) -> (%3d - %3d)\n",
+					      plane->base.base.id,
+					      id + 1, pipe_name(pipe),
+					      cur_ddb->start, cur_ddb->end,
+					      new_ddb->start, new_ddb->end);
+			} else {
+				DRM_DEBUG_KMS("[PLANE:%d:cursor %c] DDB: (%3d - %3d) -> (%3d - %3d)\n",
+					      plane->base.base.id,
+					      pipe_name(pipe),
+					      cur_ddb->start, cur_ddb->end,
+					      new_ddb->start, new_ddb->end);
+			}
+		}
+	}
+}
+
 static int
 skl_compute_ddb(struct drm_atomic_state *state)
 {
@@ -3975,6 +4041,8 @@ skl_compute_ddb(struct drm_atomic_state *state)
 		if (ret)
 			return ret;
 	}
+
+	skl_print_ddb_changes(state);
 
 	return 0;
 }
