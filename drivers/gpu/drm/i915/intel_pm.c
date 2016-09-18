@@ -3331,6 +3331,7 @@ static int
 skl_allocate_pipe_ddb(struct intel_crtc_state *cstate)
 {
 	struct drm_atomic_state *state = cstate->base.state;
+	struct intel_atomic_state *intel_state = to_intel_atomic_state(state);
 	struct drm_crtc *crtc = cstate->base.crtc;
 	struct drm_device *dev = crtc->dev;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
@@ -3355,7 +3356,7 @@ skl_allocate_pipe_ddb(struct intel_crtc_state *cstate)
 
 		/* Clear the ddb for each plane */
 		for_each_intel_plane_on_crtc(dev, intel_crtc, intel_plane) {
-			intel_pstate = intel_atomic_get_existing_plane_state(
+			intel_pstate = intel_atomic_get_plane_state(
 			    state, intel_plane);
 			if (!intel_pstate)
 				continue;
@@ -3370,7 +3371,7 @@ skl_allocate_pipe_ddb(struct intel_crtc_state *cstate)
 	alloc_size = skl_ddb_entry_size(alloc);
 	if (alloc_size == 0) {
 		for_each_intel_plane_on_crtc(dev, intel_crtc, intel_plane) {
-			intel_pstate = intel_atomic_get_existing_plane_state(
+			intel_pstate = intel_atomic_get_plane_state(
 			    state, intel_plane);
 			if (!intel_pstate)
 				continue;
@@ -3383,12 +3384,19 @@ skl_allocate_pipe_ddb(struct intel_crtc_state *cstate)
 
 	cursor_blocks = skl_cursor_allocation(num_active);
 	intel_plane = to_intel_plane(crtc->cursor);
-	intel_pstate = intel_atomic_get_plane_state(state, intel_plane);
-	if (IS_ERR(intel_pstate))
-		return -ENOMEM;
+	if (intel_state->active_pipe_changes) {
+		intel_pstate = intel_atomic_get_plane_state(state, intel_plane);
+		if (IS_ERR(intel_pstate))
+			return -ENOMEM;
+	} else {
+		intel_pstate = intel_atomic_get_existing_plane_state(
+		    state, intel_plane);
+	}
 
-	intel_pstate->wm.ddb.plane.start = alloc->end - cursor_blocks;
-	intel_pstate->wm.ddb.plane.end = alloc->end;
+	if (intel_pstate) {
+		intel_pstate->wm.ddb.plane.start = alloc->end - cursor_blocks;
+		intel_pstate->wm.ddb.plane.end = alloc->end;
+	}
 
 	alloc_size -= cursor_blocks;
 
@@ -3437,11 +3445,20 @@ skl_allocate_pipe_ddb(struct intel_crtc_state *cstate)
 		uint16_t plane_blocks, y_plane_blocks = 0;
 		int id = skl_wm_plane_id(intel_plane);
 
-		intel_pstate = intel_atomic_get_plane_state(state, intel_plane);
-		if (IS_ERR(intel_pstate))
-			return -ENOMEM;
+		if (id == PLANE_CURSOR) {
+			intel_pstate = NULL;
+		} else if (intel_state->active_pipe_changes) {
+			intel_pstate = intel_atomic_get_plane_state(
+			    state, intel_plane);
+			if (IS_ERR(intel_pstate))
+				return -ENOMEM;
+		} else {
+			intel_pstate = intel_atomic_get_existing_plane_state(
+			    state, intel_plane);
+		}
 
-		ddb = &intel_pstate->wm.ddb;
+		if (intel_pstate)
+			ddb = &intel_pstate->wm.ddb;
 
 		data_rate = cstate->wm.skl.plane_data_rate[id];
 
@@ -3455,7 +3472,7 @@ skl_allocate_pipe_ddb(struct intel_crtc_state *cstate)
 					total_data_rate);
 
 		/* Leave disabled planes at (0,0) */
-		if (data_rate) {
+		if (intel_pstate && data_rate) {
 			ddb->plane.start = start;
 			ddb->plane.end = start + plane_blocks;
 		}
@@ -3471,7 +3488,7 @@ skl_allocate_pipe_ddb(struct intel_crtc_state *cstate)
 		y_plane_blocks += div_u64((uint64_t)alloc_size * y_data_rate,
 					total_data_rate);
 
-		if (y_data_rate) {
+		if (intel_pstate && y_data_rate) {
 			ddb->y_plane.start = start;
 			ddb->y_plane.end = start + y_plane_blocks;
 		}
