@@ -233,7 +233,7 @@ skl_update_plane(struct drm_plane *drm_plane,
 
 	if (wm->dirty_pipes & drm_crtc_mask(crtc))
 		skl_write_plane_wm(intel_crtc, &plane_state->wm, &wm->ddb,
-				   plane);
+				   skl_wm_plane_id(intel_plane));
 
 	if (key->flags) {
 		I915_WRITE(PLANE_KEYVAL(pipe, plane), key->min_value);
@@ -296,7 +296,8 @@ skl_disable_plane(struct drm_plane *dplane, struct drm_crtc *crtc)
 	const int plane = intel_plane->plane + 1;
 
 	skl_write_plane_wm(to_intel_crtc(crtc), &intel_pstate->wm,
-			   &dev_priv->wm.skl_results.ddb, plane);
+			   &dev_priv->wm.skl_results.ddb,
+			   skl_wm_plane_id(intel_plane));
 
 	I915_WRITE(PLANE_CTL(pipe, plane), 0);
 

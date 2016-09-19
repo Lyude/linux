@@ -2868,7 +2868,7 @@ bool ilk_disable_lp_wm(struct drm_device *dev)
  * other universal planes are in indices 1..n.  Note that this may leave unused
  * indices between the top "sprite" plane and the cursor.
  */
-static int
+int
 skl_wm_plane_id(const struct intel_plane *plane)
 {
 	switch (plane->base.type) {
