@@ -292,6 +292,8 @@ struct i915_hotplug {
 	struct work_struct poll_init_work;
 	bool poll_enabled;
 
+	struct work_struct resume_reprobe_work;
+
 	/*
 	 * if we get a HPD irq from DP and a HPD irq from non-DP
 	 * the non-DP HPD could block the workqueue on a mode config

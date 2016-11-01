@@ -523,6 +523,22 @@ static void i915_hpd_poll_init_work(struct work_struct *work)
 		drm_helper_hpd_irq_event(dev);
 }
 
+void intel_resume_reprobe_work(struct work_struct *work)
+{
+	struct drm_i915_private *dev_priv =
+		container_of(work, struct drm_i915_private,
+			     hotplug.resume_reprobe_work);
+	struct drm_device *dev = &dev_priv->drm;
+
+	/* Config may have changed between suspend and resume */
+	drm_helper_hpd_irq_event(dev);
+
+	/* Also call this here, since we'll keep the main resume thread waiting
+	 * if we make it try to grab the mode_config lock
+	 */
+	drm_kms_helper_poll_enable(dev);
+}
+
 /**
  * intel_hpd_poll_init - enables/disables polling for connectors with hpd
  * @dev_priv: i915 device instance
@@ -557,6 +573,8 @@ void intel_hpd_init_work(struct drm_i915_private *dev_priv)
 	INIT_WORK(&dev_priv->hotplug.hotplug_work, i915_hotplug_work_func);
 	INIT_WORK(&dev_priv->hotplug.dig_port_work, i915_digport_work_func);
 	INIT_WORK(&dev_priv->hotplug.poll_init_work, i915_hpd_poll_init_work);
+	INIT_WORK(&dev_priv->hotplug.resume_reprobe_work,
+		  intel_resume_reprobe_work);
 	INIT_DELAYED_WORK(&dev_priv->hotplug.reenable_work,
 			  intel_hpd_irq_storm_reenable_work);
 }
@@ -571,6 +589,7 @@ void intel_hpd_cancel_work(struct drm_i915_private *dev_priv)
 
 	spin_unlock_irq(&dev_priv->irq_lock);
 
+	cancel_work_sync(&dev_priv->hotplug.resume_reprobe_work);
 	cancel_work_sync(&dev_priv->hotplug.dig_port_work);
 	cancel_work_sync(&dev_priv->hotplug.hotplug_work);
 	cancel_work_sync(&dev_priv->hotplug.poll_init_work);

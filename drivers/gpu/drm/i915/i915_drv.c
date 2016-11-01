@@ -1606,8 +1606,11 @@ static int i915_drm_resume(struct drm_device *dev)
 	 * notifications.
 	 * */
 	intel_hpd_init(dev_priv);
-	/* Config may have changed between suspend and resume */
-	drm_helper_hpd_irq_event(dev);
+
+	/* Handle the rest of the suspend/resume reprobing and polling setup in
+	 * another thread to speed things up a little bit
+	 */
+	schedule_work(&dev_priv->hotplug.resume_reprobe_work);
 
 	intel_opregion_register(dev_priv);
 
@@ -1620,7 +1623,6 @@ static int i915_drm_resume(struct drm_device *dev)
 	intel_opregion_notify_adapter(dev_priv, PCI_D0);
 
 	intel_autoenable_gt_powersave(dev_priv);
-	drm_kms_helper_poll_enable(dev);
 
 	enable_rpm_wakeref_asserts(dev_priv);
 
