@@ -195,14 +195,16 @@ nvkm_volt_parse_bios(struct nvkm_bios *bios, struct nvkm_volt *volt)
 	data = nvbios_volt_parse(bios, &ver, &hdr, &cnt, &len, &info);
 	if (data && info.vidmask && info.base && info.step && info.ranged) {
 		nvkm_debug(subdev, "found ranged based VIDs\n");
-		volt->min_uv = info.min;
-		volt->max_uv = info.max;
+		volt->min_uv = 0xffffffff;
+		volt->max_uv = 0;
 		for (i = 0; i < info.vidmask + 1; i++) {
 			if (info.base >= info.min &&
 				info.base <= info.max) {
 				volt->vid[volt->vid_nr].uv = info.base;
 				volt->vid[volt->vid_nr].vid = i;
 				volt->vid_nr++;
+				volt->min_uv = min(volt->min_uv, info.base);
+				volt->max_uv = max(volt->max_uv, info.base);
 			}
 			info.base += info.step;
 		}
