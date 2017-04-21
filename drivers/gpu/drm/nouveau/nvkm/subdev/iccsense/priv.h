@@ -18,7 +18,7 @@ struct nvkm_iccsense_rail {
 	int (*read)(struct nvkm_iccsense *, struct nvkm_iccsense_rail *);
 	struct nvkm_iccsense_sensor *sensor;
 	u8 idx;
-	u8 mohm;
+	u16 mohm;
 };
 
 void nvkm_iccsense_ctor(struct nvkm_device *, int, struct nvkm_iccsense *);

@@ -760,7 +760,7 @@ nouveau_hwmon_init(struct drm_device *dev)
 			goto error;
 	}
 
-	if (iccsense && iccsense->data_valid && !list_empty(&iccsense->rails)) {
+//	if (iccsense && iccsense->data_valid && !list_empty(&iccsense->rails)) {
 		ret = sysfs_create_group(&hwmon_dev->kobj,
 					 &hwmon_power_attrgroup);
 
@@ -773,7 +773,7 @@ nouveau_hwmon_init(struct drm_device *dev)
 			if (ret)
 				goto error;
 		}
-	}
+//	}
 
 	hwmon->hwmon = hwmon_dev;
 

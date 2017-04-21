@@ -182,10 +182,9 @@ nvkm_iccsense_create_sensor(struct nvkm_iccsense *iccsense, u8 id)
 	addr = extdev.addr >> 1;
 	if (!nvkm_iccsense_validate_device(&i2c_bus->i2c, addr,
 					   extdev.type)) {
-		iccsense->data_valid = false;
+		iccsense->data_valid = true;
 		nvkm_warn(subdev, "found invalid sensor id: %i, power reading"
 			  "might be invalid\n", id);
-		return NULL;
 	}
 
 	sensor = kmalloc(sizeof(*sensor), GFP_KERNEL);
@@ -244,7 +243,7 @@ nvkm_iccsense_oneinit(struct nvkm_subdev *subdev)
 		struct nvkm_iccsense_sensor *sensor;
 		int r;
 
-		if (pwr_rail->mode != 1 || !pwr_rail->resistor_count)
+		if (!pwr_rail->resistor_count)
 			continue;
 
 		sensor = nvkm_iccsense_get_sensor(iccsense, pwr_rail->extdev_id);
