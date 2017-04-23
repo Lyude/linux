@@ -353,6 +353,7 @@ nvkm_therm_init(struct nvkm_subdev *subdev)
 
 	nvkm_therm_sensor_init(therm);
 	nvkm_therm_fan_init(therm);
+	nvkm_therm_clkgate_init(therm, NVKM_THERM_CLKGATE_MODE_AUTO);
 	return 0;
 }
 

@@ -45,6 +45,12 @@ enum nvkm_therm_attr_type {
 	NVKM_THERM_ATTR_THRS_SHUTDOWN_HYST = 17,
 };
 
+enum nvkm_therm_clkgate_mode {
+	NVKM_THERM_CLKGATE_MODE_RUN = 0,
+	NVKM_THERM_CLKGATE_MODE_AUTO = 1,
+	NVKM_THERM_CLKGATE_MODE_OFF = 2
+};
+
 struct nvkm_therm {
 	const struct nvkm_therm_func *func;
 	struct nvkm_subdev subdev;
@@ -94,6 +100,7 @@ int nv40_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int nv50_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int g84_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gt215_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
+int gf100_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gf119_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gm107_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 #endif
