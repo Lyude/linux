@@ -21,6 +21,7 @@
  *
  * Authors: Martin Peres
  */
+#include <nvkm/core/option.h>
 #include "priv.h"
 
 int
@@ -297,6 +298,50 @@ nvkm_therm_attr_set(struct nvkm_therm *therm,
 	return -EINVAL;
 }
 
+static enum nvkm_therm_clkgate_level
+nvkm_therm_clkgate_level(const struct nvkm_therm *therm)
+{
+	static bool __read_mostly cached = false;
+	static enum nvkm_therm_clkgate_level __read_mostly level =
+		NVKM_THERM_CLKGATE_NONE;
+
+	if (!cached) {
+		cached = true;
+		level = nvkm_longopt(therm->subdev.device->cfgopt,
+				     "NvPmEnableGating",
+				     NVKM_THERM_CLKGATE_NONE);
+		level = min((int)level, NVKM_THERM_CLKGATE_CG);
+	}
+
+	return level;
+}
+
+static void
+nvkm_therm_clkgate_enable(struct nvkm_therm *therm, bool enable)
+{
+	const char *clkgate_str;
+	enum nvkm_therm_clkgate_level clkgate_level =
+		nvkm_therm_clkgate_level(therm);
+
+	if (!therm->func->clkgate_enable)
+		return;
+
+	switch(clkgate_level) {
+	case NVKM_THERM_CLKGATE_CG: clkgate_str = "CG"; break;
+	default:                    clkgate_str = "???"; break;
+	}
+
+	therm->func->clkgate_enable(therm, enable);
+
+	if (clkgate_level && enable) {
+		nvkm_info(&therm->subdev,
+			  "Clock/powergating enabled up to level %d (%s)\n",
+			  clkgate_level, clkgate_str);
+	} else {
+		nvkm_info(&therm->subdev, "Clock/powergating disabled\n");
+	}
+}
+
 static void
 nvkm_therm_intr(struct nvkm_subdev *subdev)
 {
@@ -328,11 +373,14 @@ static int
 nvkm_therm_oneinit(struct nvkm_subdev *subdev)
 {
 	struct nvkm_therm *therm = nvkm_therm(subdev);
+
 	nvkm_therm_sensor_ctor(therm);
 	nvkm_therm_ic_ctor(therm);
 	nvkm_therm_fan_ctor(therm);
 	nvkm_therm_fan_mode(therm, NVKM_THERM_CTRL_AUTO);
 	nvkm_therm_sensor_preinit(therm);
+	nvkm_therm_clkgate_enable(therm, true);
+
 	return 0;
 }
 
@@ -360,6 +408,10 @@ static void *
 nvkm_therm_dtor(struct nvkm_subdev *subdev)
 {
 	struct nvkm_therm *therm = nvkm_therm(subdev);
+
+	if (nvkm_therm_clkgate_level(therm))
+		nvkm_therm_clkgate_enable(therm, false);
+
 	kfree(therm->fan);
 	return therm;
 }
@@ -373,15 +425,10 @@ nvkm_therm = {
 	.intr = nvkm_therm_intr,
 };
 
-int
-nvkm_therm_new_(const struct nvkm_therm_func *func, struct nvkm_device *device,
-		int index, struct nvkm_therm **ptherm)
+void
+nvkm_therm_ctor(struct nvkm_therm *therm, struct nvkm_device *device,
+		int index, const struct nvkm_therm_func *func)
 {
-	struct nvkm_therm *therm;
-
-	if (!(therm = *ptherm = kzalloc(sizeof(*therm), GFP_KERNEL)))
-		return -ENOMEM;
-
 	nvkm_subdev_ctor(&nvkm_therm, device, index, &therm->subdev);
 	therm->func = func;
 
@@ -394,5 +441,17 @@ nvkm_therm_new_(const struct nvkm_therm_func *func, struct nvkm_device *device,
 	therm->attr_get = nvkm_therm_attr_get;
 	therm->attr_set = nvkm_therm_attr_set;
 	therm->mode = therm->suspend = -1; /* undefined */
+}
+
+int
+nvkm_therm_new_(const struct nvkm_therm_func *func, struct nvkm_device *device,
+		int index, struct nvkm_therm **ptherm)
+{
+	struct nvkm_therm *therm;
+
+	if (!(therm = *ptherm = kzalloc(sizeof(*therm), GFP_KERNEL)))
+		return -ENOMEM;
+
+	nvkm_therm_ctor(therm, device, index, func);
 	return 0;
 }
