@@ -356,6 +356,14 @@ nvkm_therm_init(struct nvkm_subdev *subdev)
 	return 0;
 }
 
+void
+nvkm_therm_clkgate_engine(struct nvkm_therm *therm, enum nvkm_devidx engine,
+			  bool enable)
+{
+	if (therm->func->clkgate_engine)
+		therm->func->clkgate_engine(therm, engine, enable);
+}
+
 static void *
 nvkm_therm_dtor(struct nvkm_subdev *subdev)
 {
