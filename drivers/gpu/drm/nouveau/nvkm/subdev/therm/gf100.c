@@ -25,8 +25,8 @@
 
 #include "priv.h"
 
-int
-gf100_clkgate_engine(enum nvkm_devidx subdev)
+static inline int
+gf100_clkgate_engine_offset(enum nvkm_devidx subdev)
 {
 	switch (subdev) {
 		case NVKM_ENGINE_GR:     return 0x00;
@@ -42,16 +42,21 @@ gf100_clkgate_engine(enum nvkm_devidx subdev)
 }
 
 void
-gf100_clkgate_set(struct nvkm_therm *therm, int gate_idx, bool enable)
+gf100_clkgate_engine(struct nvkm_therm *therm, enum nvkm_devidx subdev,
+		     bool enable)
 {
+	int offset = gf100_clkgate_engine_offset(subdev);
 	u8 data;
+
+	if (offset == -1)
+		return;
 
 	if (enable) /* ENG_CLK=auto, BLK_CLK=auto, ENG_PWR=run, BLK_PWR=auto */
 		data = 0x45;
 	else        /* ENG_CLK=run, BLK_CLK=run, ENG_PWR=run, BLK_PWR=run */
 		data = 0x0;
 
-	nvkm_mask(therm->subdev.device, 0x20200 + gate_idx, 0xff, data);
+	nvkm_mask(therm->subdev.device, 0x20200 + offset, 0xff, data);
 }
 
 static const struct nvkm_therm_func
@@ -66,7 +71,6 @@ gf100_therm = {
 	.fan_sense = gt215_therm_fan_sense,
 	.program_alarms = nvkm_therm_program_alarms_polling,
 	.clkgate_engine = gf100_clkgate_engine,
-	.clkgate_set = gf100_clkgate_set,
 };
 
 int

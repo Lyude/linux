@@ -23,27 +23,21 @@
  */
 #include "priv.h"
 
-int
-nvkm_therm_clkgate_engine(struct nvkm_therm *therm, enum nvkm_devidx subdev)
+void
+nvkm_therm_clkgate_set(struct nvkm_therm *therm, enum nvkm_devidx engine,
+		       bool enable)
 {
 	if (!therm->func->clkgate_engine)
-		return -1;
-
-	return therm->func->clkgate_engine(subdev);
-}
-
-void
-nvkm_therm_clkgate_set(struct nvkm_therm *therm, int gate_idx, bool enable)
-{
-	if (!therm->func->clkgate_set)
 		return;
 
 	if (enable)
 		nvkm_trace(&therm->subdev,
-			   "Enabling clockgating for gate 0x%x\n", gate_idx);
+			   "Enabling clockgating for %s\n",
+			   nvkm_subdev_name[engine]);
 	else
 		nvkm_trace(&therm->subdev,
-			   "Disabling clockgating for gate 0x%x\n", gate_idx);
+			   "Disabling clockgating for %s\n",
+			   nvkm_subdev_name[engine]);
 
-	therm->func->clkgate_set(therm, gate_idx, enable);
+	therm->func->clkgate_engine(therm, engine, enable);
 }

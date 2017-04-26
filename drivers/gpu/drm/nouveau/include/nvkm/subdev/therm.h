@@ -84,14 +84,12 @@ struct nvkm_therm {
 
 	int (*attr_get)(struct nvkm_therm *, enum nvkm_therm_attr_type);
 	int (*attr_set)(struct nvkm_therm *, enum nvkm_therm_attr_type, int);
-
-	int  (*clkgate_engine)(struct nvkm_therm *, enum nvkm_devidx);
-	void (*clkgate_set)(struct nvkm_therm *, int gate_idx, bool enable);
 };
 
 int nvkm_therm_temp_get(struct nvkm_therm *);
 int nvkm_therm_fan_sense(struct nvkm_therm *);
 int nvkm_therm_cstate(struct nvkm_therm *, int, int);
+void nvkm_therm_clkgate_engine(struct nvkm_therm *, enum nvkm_devidx, bool);
 
 int nv40_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int nv50_therm_new(struct nvkm_device *, int, struct nvkm_therm **);

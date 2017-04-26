@@ -87,12 +87,8 @@ static int
 nvkm_engine_fini(struct nvkm_subdev *subdev, bool suspend)
 {
 	struct nvkm_engine *engine = nvkm_engine(subdev);
-	struct nvkm_therm *therm = subdev->device->therm;
-	int gate_idx;
 
-	gate_idx = therm->clkgate_engine(therm, subdev->index);
-	if (gate_idx != -1)
-		therm->clkgate_set(therm, gate_idx, false);
+	nvkm_therm_clkgate_engine(subdev->device->therm, subdev->index, true);
 
 	if (engine->func->fini)
 		return engine->func->fini(engine, suspend);
@@ -134,12 +130,8 @@ nvkm_engine_init(struct nvkm_subdev *subdev)
 		nvkm_engine_tile(engine, i);
 
 finish:
-	if (!ret) {
-		int gate_idx = therm->clkgate_engine(therm, subdev->index);
-
-		if (gate_idx != -1)
-			therm->clkgate_set(therm, gate_idx, true);
-	}
+	if (!ret)
+		nvkm_therm_clkgate_engine(therm, subdev->index, true);
 
 	return ret;
 }
