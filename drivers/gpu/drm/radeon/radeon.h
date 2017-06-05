@@ -773,13 +773,7 @@ struct evergreen_irq_stat_regs {
 };
 
 struct cik_irq_stat_regs {
-	u32 disp_int;
-	u32 disp_int_cont;
-	u32 disp_int_cont2;
-	u32 disp_int_cont3;
-	u32 disp_int_cont4;
-	u32 disp_int_cont5;
-	u32 disp_int_cont6;
+	u32 disp_int[7];
 	u32 d1grph_int;
 	u32 d2grph_int;
 	u32 d3grph_int;
