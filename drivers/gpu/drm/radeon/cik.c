@@ -6989,18 +6989,8 @@ static void cik_disable_interrupt_state(struct radeon_device *rdev)
 		WREG32(LB_INTERRUPT_MASK + crtc_offsets[i], 0);
 
 	/* pflip */
-	if (rdev->num_crtc >= 2) {
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC0_REGISTER_OFFSET, 0);
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC1_REGISTER_OFFSET, 0);
-	}
-	if (rdev->num_crtc >= 4) {
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC2_REGISTER_OFFSET, 0);
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC3_REGISTER_OFFSET, 0);
-	}
-	if (rdev->num_crtc >= 6) {
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC4_REGISTER_OFFSET, 0);
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC5_REGISTER_OFFSET, 0);
-	}
+	for (i = 0; i < rdev->num_crtc; i++)
+		WREG32(GRPH_INT_CONTROL + crtc_offsets[i], 0);
 
 	/* dac hotplug */
 	WREG32(DAC_AUTODETECT_INT_CONTROL, 0);
@@ -7195,24 +7185,8 @@ int cik_irq_set(struct radeon_device *rdev)
 		    atomic_read(&rdev->irq.pflip[i]),
 		    "vblank", i);
 
-	if (rdev->num_crtc >= 2) {
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC0_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_MASK);
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC1_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_MASK);
-	}
-	if (rdev->num_crtc >= 4) {
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC2_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_MASK);
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC3_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_MASK);
-	}
-	if (rdev->num_crtc >= 6) {
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC4_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_MASK);
-		WREG32(GRPH_INT_CONTROL + EVERGREEN_CRTC5_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_MASK);
-	}
+	for (i = 0; i < rdev->num_crtc; i++)
+		WREG32(GRPH_INT_CONTROL + crtc_offsets[i], GRPH_PFLIP_INT_MASK);
 
 	for (i = 0; i < 6; i++)
 		radeon_irq_kms_set_irq_n_enabled(
@@ -7232,83 +7206,40 @@ int cik_irq_set(struct radeon_device *rdev)
  *
  * @rdev: radeon_device pointer
  *
- * Ack interrupt sources on the GPU (vblanks, hpd,
- * etc.) (CIK).  Certain interrupts sources are sw
- * generated and do not require an explicit ack.
+ * Ack interrupt sources on the GPU (vblanks, hpd, etc.) (CIK).  Certain
+ * interrupts sources are sw generated and do not require an explicit ack.
+ * Note that the order that we write back all of the registers here is
+ * important.
  */
 static inline void cik_irq_ack(struct radeon_device *rdev)
 {
 	u32 *disp_int = rdev->irq.stat_regs.cik.disp_int;
+	u32 *grph_int = rdev->irq.stat_regs.cik.grph_int;
 	u32 tmp;
-	int i;
+	int i, j;
 
-	for (i = 0; i < 7; i++)
+	for (i = 0; i < 7; i++) {
 		disp_int[i] = RREG32(disp_int_regs[i]);
-
-	rdev->irq.stat_regs.cik.d1grph_int = RREG32(GRPH_INT_STATUS +
-		EVERGREEN_CRTC0_REGISTER_OFFSET);
-	rdev->irq.stat_regs.cik.d2grph_int = RREG32(GRPH_INT_STATUS +
-		EVERGREEN_CRTC1_REGISTER_OFFSET);
-	if (rdev->num_crtc >= 4) {
-		rdev->irq.stat_regs.cik.d3grph_int = RREG32(GRPH_INT_STATUS +
-			EVERGREEN_CRTC2_REGISTER_OFFSET);
-		rdev->irq.stat_regs.cik.d4grph_int = RREG32(GRPH_INT_STATUS +
-			EVERGREEN_CRTC3_REGISTER_OFFSET);
-	}
-	if (rdev->num_crtc >= 6) {
-		rdev->irq.stat_regs.cik.d5grph_int = RREG32(GRPH_INT_STATUS +
-			EVERGREEN_CRTC4_REGISTER_OFFSET);
-		rdev->irq.stat_regs.cik.d6grph_int = RREG32(GRPH_INT_STATUS +
-			EVERGREEN_CRTC5_REGISTER_OFFSET);
+		if (i < rdev->num_crtc)
+			grph_int[i] = RREG32(GRPH_INT_STATUS + crtc_offsets[i]);
 	}
 
-	if (rdev->irq.stat_regs.cik.d1grph_int & GRPH_PFLIP_INT_OCCURRED)
-		WREG32(GRPH_INT_STATUS + EVERGREEN_CRTC0_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_CLEAR);
-	if (rdev->irq.stat_regs.cik.d2grph_int & GRPH_PFLIP_INT_OCCURRED)
-		WREG32(GRPH_INT_STATUS + EVERGREEN_CRTC1_REGISTER_OFFSET,
-		       GRPH_PFLIP_INT_CLEAR);
-	if (disp_int[0] & LB_D1_VBLANK_INTERRUPT)
-		WREG32(LB_VBLANK_STATUS + crtc_offsets[0], VBLANK_ACK);
-	if (disp_int[0] & LB_D1_VLINE_INTERRUPT)
-		WREG32(LB_VBLANK_STATUS + crtc_offsets[0], VLINE_ACK);
-	if (disp_int[1] & LB_D1_VBLANK_INTERRUPT)
-		WREG32(LB_VBLANK_STATUS + crtc_offsets[1], VBLANK_ACK);
-	if (disp_int[1] & LB_D1_VLINE_INTERRUPT)
-		WREG32(LB_VBLANK_STATUS + crtc_offsets[1], VLINE_ACK);
+	/* We write back each interrupt register in pairs of two */
+	for (i = 0; i < rdev->num_crtc; i += 2) {
+		for (j = i; j < (i + 2); j++) {
+			if (grph_int[j] & GRPH_PFLIP_INT_OCCURRED)
+				WREG32(GRPH_INT_STATUS + crtc_offsets[j],
+				       GRPH_PFLIP_INT_CLEAR);
+		}
 
-	if (rdev->num_crtc >= 4) {
-		if (rdev->irq.stat_regs.cik.d3grph_int & GRPH_PFLIP_INT_OCCURRED)
-			WREG32(GRPH_INT_STATUS + EVERGREEN_CRTC2_REGISTER_OFFSET,
-			       GRPH_PFLIP_INT_CLEAR);
-		if (rdev->irq.stat_regs.cik.d4grph_int & GRPH_PFLIP_INT_OCCURRED)
-			WREG32(GRPH_INT_STATUS + EVERGREEN_CRTC3_REGISTER_OFFSET,
-			       GRPH_PFLIP_INT_CLEAR);
-		if (disp_int[2] & LB_D1_VBLANK_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[2], VBLANK_ACK);
-		if (disp_int[2] & LB_D1_VLINE_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[2], VLINE_ACK);
-		if (disp_int[3] & LB_D1_VBLANK_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[3], VBLANK_ACK);
-		if (disp_int[3] & LB_D1_VLINE_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[3], VLINE_ACK);
-	}
-
-	if (rdev->num_crtc >= 6) {
-		if (rdev->irq.stat_regs.cik.d5grph_int & GRPH_PFLIP_INT_OCCURRED)
-			WREG32(GRPH_INT_STATUS + EVERGREEN_CRTC4_REGISTER_OFFSET,
-			       GRPH_PFLIP_INT_CLEAR);
-		if (rdev->irq.stat_regs.cik.d6grph_int & GRPH_PFLIP_INT_OCCURRED)
-			WREG32(GRPH_INT_STATUS + EVERGREEN_CRTC5_REGISTER_OFFSET,
-			       GRPH_PFLIP_INT_CLEAR);
-		if (disp_int[4] & LB_D1_VBLANK_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[4], VBLANK_ACK);
-		if (disp_int[4] & LB_D1_VLINE_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[4], VLINE_ACK);
-		if (disp_int[5] & LB_D1_VBLANK_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[5], VBLANK_ACK);
-		if (disp_int[5] & LB_D1_VLINE_INTERRUPT)
-			WREG32(LB_VBLANK_STATUS + crtc_offsets[5], VLINE_ACK);
+		for (j = i; j < (i + 2); j++) {
+			if (disp_int[j] & LB_D1_VBLANK_INTERRUPT)
+				WREG32(VBLANK_STATUS + crtc_offsets[j],
+				       VBLANK_ACK);
+			if (disp_int[j] & LB_D1_VLINE_INTERRUPT)
+				WREG32(VLINE_STATUS + crtc_offsets[j],
+				       VLINE_ACK);
+		}
 	}
 
 	for (i = 0; i < DC_HPD_REG_COUNT; i++) {
