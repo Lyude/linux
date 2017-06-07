@@ -7369,11 +7369,13 @@ int cik_irq_process(struct radeon_device *rdev)
 {
 	struct radeon_ring *cp1_ring = &rdev->ring[CAYMAN_RING_TYPE_CP1_INDEX];
 	struct radeon_ring *cp2_ring = &rdev->ring[CAYMAN_RING_TYPE_CP2_INDEX];
+	char *event_name;
 	u32 *disp_int = rdev->irq.stat_regs.cik.disp_int;
 	u32 crtc_idx, hpd_idx;
 	u32 wptr;
 	u32 rptr;
 	u32 src_id, src_data, ring_id;
+	u32 mask;
 	u8 me_id, pipe_id, queue_id;
 	u32 ring_index;
 	bool queue_hotplug = false;
