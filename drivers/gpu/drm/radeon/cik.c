@@ -7234,10 +7234,10 @@ static inline void cik_irq_ack(struct radeon_device *rdev)
 
 		for (j = i; j < (i + 2); j++) {
 			if (disp_int[j] & LB_D1_VBLANK_INTERRUPT)
-				WREG32(VBLANK_STATUS + crtc_offsets[j],
+				WREG32(LB_VBLANK_STATUS + crtc_offsets[j],
 				       VBLANK_ACK);
 			if (disp_int[j] & LB_D1_VLINE_INTERRUPT)
-				WREG32(VLINE_STATUS + crtc_offsets[j],
+				WREG32(LB_VLINE_STATUS + crtc_offsets[j],
 				       VLINE_ACK);
 		}
 	}
