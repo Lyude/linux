@@ -97,6 +97,117 @@ static const u32 crtc_offsets[2] =
 	AVIVO_D2CRTC_H_TOTAL - AVIVO_D1CRTC_H_TOTAL
 };
 
+static const struct r600_irq_reg_table dce2_irq_reg_table = {
+	.disp_int = {
+		DISP_INTERRUPT_STATUS,
+		DISP_INTERRUPT_STATUS_CONTINUE,
+		0
+	},
+	.hpd_control = {
+		DC_HOT_PLUG_DETECT1_CONTROL,
+		DC_HOT_PLUG_DETECT2_CONTROL,
+		DC_HOT_PLUG_DETECT3_CONTROL,
+		0, 0, 0
+	},
+	.hpd_int_control = {
+		DC_HOT_PLUG_DETECT1_INT_CONTROL,
+		DC_HOT_PLUG_DETECT2_INT_CONTROL,
+		DC_HOT_PLUG_DETECT3_INT_CONTROL,
+		0, 0, 0
+	},
+	.hpd_int_stat = {
+		DC_HOT_PLUG_DETECT1_INT_STATUS,
+		DC_HOT_PLUG_DETECT2_INT_STATUS,
+		DC_HOT_PLUG_DETECT3_INT_STATUS,
+		0, 0, 0
+	},
+	.hpd_init_val = DC_HOT_PLUG_DETECTx_EN,
+};
+
+static const struct r600_irq_reg_table dce3_irq_reg_table = {
+	.disp_int = {
+		DCE3_DISP_INTERRUPT_STATUS,
+		DCE3_DISP_INTERRUPT_STATUS_CONTINUE,
+		DCE3_DISP_INTERRUPT_STATUS_CONTINUE2,
+	},
+	.hpd_control = {
+		DC_HPD1_CONTROL,
+		DC_HPD2_CONTROL,
+		DC_HPD3_CONTROL,
+		DC_HPD4_CONTROL,
+		0, 0
+	},
+	.hpd_int_control = {
+		DC_HPD1_INT_CONTROL,
+		DC_HPD2_INT_CONTROL,
+		DC_HPD3_INT_CONTROL,
+		DC_HPD4_INT_CONTROL,
+		0, 0
+	},
+	.hpd_int_stat = {
+		DC_HPD1_INT_STATUS,
+		DC_HPD2_INT_STATUS,
+		DC_HPD3_INT_STATUS,
+		DC_HPD4_INT_STATUS,
+		0, 0
+	},
+	.hpd_init_val =
+		DC_HPDx_CONNECTION_TIMER(0x9c4) | DC_HPDx_RX_INT_TIMER(0xfa),
+};
+
+static const struct r600_irq_reg_table dce32_irq_reg_table = {
+	.disp_int = {
+		DCE3_DISP_INTERRUPT_STATUS,
+		DCE3_DISP_INTERRUPT_STATUS_CONTINUE,
+		DCE3_DISP_INTERRUPT_STATUS_CONTINUE2,
+	},
+	.hpd_control = {
+		DC_HPD1_CONTROL,
+		DC_HPD2_CONTROL,
+		DC_HPD3_CONTROL,
+		DC_HPD4_CONTROL,
+		DC_HPD5_CONTROL,
+		DC_HPD6_CONTROL,
+	},
+	.hpd_int_control = {
+		DC_HPD1_INT_CONTROL,
+		DC_HPD2_INT_CONTROL,
+		DC_HPD3_INT_CONTROL,
+		DC_HPD4_INT_CONTROL,
+		DC_HPD5_INT_CONTROL,
+		DC_HPD6_INT_CONTROL,
+	},
+	.hpd_int_stat = {
+		DC_HPD1_INT_STATUS,
+		DC_HPD2_INT_STATUS,
+		DC_HPD3_INT_STATUS,
+		DC_HPD4_INT_STATUS,
+		DC_HPD5_INT_STATUS,
+		DC_HPD6_INT_STATUS,
+	},
+	.hpd_init_val =
+		DC_HPDx_CONNECTION_TIMER(0x9c4) | DC_HPDx_RX_INT_TIMER(0xfa) |
+		DC_HPDx_EN,
+};
+
+#define for_each_reg_in_table(reg_table, iter) \
+	for (iter = 0; iter < ARRAY_SIZE(reg_table) && reg_table[iter]; iter++)
+
+static const u32 hpd_int_mask[] = {
+	DC_HPD1_INTERRUPT,
+	DC_HPD2_INTERRUPT,
+	DC_HPD3_INTERRUPT,
+	DC_HPD4_INTERRUPT,
+	DC_HPD5_INTERRUPT,
+	DC_HPD6_INTERRUPT,
+};
+
+#define DxMODE_VBLANK_STATUS(x)   (D1MODE_VBLANK_STATUS + (0x800 * x))
+#define DxMODE_VLINE_STATUS(x)    (D1MODE_VLINE_STATUS + (0x800 * x))
+#define DxMODE_VBLANK_INT_MASK(x) (D1MODE_VBLANK_INT_MASK << (x * 8))
+#define LB_Dx_VLINE_INTERRUPT(x)  (LB_D1_VLINE_INTERRUPT << (x))
+#define LB_Dx_VBLANK_INTERRUPT(x) (LB_D1_VBLANK_INTERRUPT << (x))
+
 int r600_debugfs_mc_info_init(struct radeon_device *rdev);
 
 /* r600,rv610,rv630,rv620,rv635,rv670 */
@@ -797,159 +908,51 @@ bool r600_gui_idle(struct radeon_device *rdev)
 /* hpd for digital panel detect/disconnect */
 bool r600_hpd_sense(struct radeon_device *rdev, enum radeon_hpd_id hpd)
 {
-	bool connected = false;
+	const struct r600_irq_reg_table *reg_table =
+		rdev->config.r600.irq_reg_table;
+	u32 reg;
 
-	if (ASIC_IS_DCE3(rdev)) {
-		switch (hpd) {
-		case RADEON_HPD_1:
-			if (RREG32(DC_HPD1_INT_STATUS) & DC_HPDx_SENSE)
-				connected = true;
-			break;
-		case RADEON_HPD_2:
-			if (RREG32(DC_HPD2_INT_STATUS) & DC_HPDx_SENSE)
-				connected = true;
-			break;
-		case RADEON_HPD_3:
-			if (RREG32(DC_HPD3_INT_STATUS) & DC_HPDx_SENSE)
-				connected = true;
-			break;
-		case RADEON_HPD_4:
-			if (RREG32(DC_HPD4_INT_STATUS) & DC_HPDx_SENSE)
-				connected = true;
-			break;
-			/* DCE 3.2 */
-		case RADEON_HPD_5:
-			if (RREG32(DC_HPD5_INT_STATUS) & DC_HPDx_SENSE)
-				connected = true;
-			break;
-		case RADEON_HPD_6:
-			if (RREG32(DC_HPD6_INT_STATUS) & DC_HPDx_SENSE)
-				connected = true;
-			break;
-		default:
-			break;
-		}
-	} else {
-		switch (hpd) {
-		case RADEON_HPD_1:
-			if (RREG32(DC_HOT_PLUG_DETECT1_INT_STATUS) & DC_HOT_PLUG_DETECTx_SENSE)
-				connected = true;
-			break;
-		case RADEON_HPD_2:
-			if (RREG32(DC_HOT_PLUG_DETECT2_INT_STATUS) & DC_HOT_PLUG_DETECTx_SENSE)
-				connected = true;
-			break;
-		case RADEON_HPD_3:
-			if (RREG32(DC_HOT_PLUG_DETECT3_INT_STATUS) & DC_HOT_PLUG_DETECTx_SENSE)
-				connected = true;
-			break;
-		default:
-			break;
-		}
-	}
-	return connected;
+	if (hpd == RADEON_HPD_NONE)
+		return false;
+
+	reg = reg_table->hpd_int_stat[hpd];
+	if (!reg)
+		return false;
+
+	return !!(RREG32(reg) & DC_HPDx_SENSE);
 }
 
 void r600_hpd_set_polarity(struct radeon_device *rdev,
 			   enum radeon_hpd_id hpd)
 {
-	u32 tmp;
+	u32 reg;
 	bool connected = r600_hpd_sense(rdev, hpd);
 
-	if (ASIC_IS_DCE3(rdev)) {
-		switch (hpd) {
-		case RADEON_HPD_1:
-			tmp = RREG32(DC_HPD1_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HPDx_INT_POLARITY;
-			else
-				tmp |= DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD1_INT_CONTROL, tmp);
-			break;
-		case RADEON_HPD_2:
-			tmp = RREG32(DC_HPD2_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HPDx_INT_POLARITY;
-			else
-				tmp |= DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD2_INT_CONTROL, tmp);
-			break;
-		case RADEON_HPD_3:
-			tmp = RREG32(DC_HPD3_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HPDx_INT_POLARITY;
-			else
-				tmp |= DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD3_INT_CONTROL, tmp);
-			break;
-		case RADEON_HPD_4:
-			tmp = RREG32(DC_HPD4_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HPDx_INT_POLARITY;
-			else
-				tmp |= DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD4_INT_CONTROL, tmp);
-			break;
-		case RADEON_HPD_5:
-			tmp = RREG32(DC_HPD5_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HPDx_INT_POLARITY;
-			else
-				tmp |= DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD5_INT_CONTROL, tmp);
-			break;
-			/* DCE 3.2 */
-		case RADEON_HPD_6:
-			tmp = RREG32(DC_HPD6_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HPDx_INT_POLARITY;
-			else
-				tmp |= DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD6_INT_CONTROL, tmp);
-			break;
-		default:
-			break;
-		}
-	} else {
-		switch (hpd) {
-		case RADEON_HPD_1:
-			tmp = RREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HOT_PLUG_DETECTx_INT_POLARITY;
-			else
-				tmp |= DC_HOT_PLUG_DETECTx_INT_POLARITY;
-			WREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL, tmp);
-			break;
-		case RADEON_HPD_2:
-			tmp = RREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HOT_PLUG_DETECTx_INT_POLARITY;
-			else
-				tmp |= DC_HOT_PLUG_DETECTx_INT_POLARITY;
-			WREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL, tmp);
-			break;
-		case RADEON_HPD_3:
-			tmp = RREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL);
-			if (connected)
-				tmp &= ~DC_HOT_PLUG_DETECTx_INT_POLARITY;
-			else
-				tmp |= DC_HOT_PLUG_DETECTx_INT_POLARITY;
-			WREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL, tmp);
-			break;
-		default:
-			break;
-		}
-	}
+	if (hpd == RADEON_HPD_NONE)
+		return;
+
+	reg = rdev->config.r600.irq_reg_table->hpd_int_control[hpd];
+	if (!reg)
+		return;
+
+	if (connected)
+		WREG32_AND(reg, ~DC_HPDx_INT_POLARITY);
+	else
+		WREG32_OR(reg, DC_HPDx_INT_POLARITY);
 }
 
 void r600_hpd_init(struct radeon_device *rdev)
 {
 	struct drm_device *dev = rdev->ddev;
 	struct drm_connector *connector;
+	const struct r600_irq_reg_table *reg_table =
+		rdev->config.r600.irq_reg_table;
 	unsigned enable = 0;
 
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
-		struct radeon_connector *radeon_connector = to_radeon_connector(connector);
+		struct radeon_connector *radeon_connector =
+			to_radeon_connector(connector);
+		enum radeon_hpd_id hpd = radeon_connector->hpd.hpd;
 
 		if (connector->connector_type == DRM_MODE_CONNECTOR_eDP ||
 		    connector->connector_type == DRM_MODE_CONNECTOR_LVDS) {
@@ -959,52 +962,13 @@ void r600_hpd_init(struct radeon_device *rdev)
 			 */
 			continue;
 		}
-		if (ASIC_IS_DCE3(rdev)) {
-			u32 tmp = DC_HPDx_CONNECTION_TIMER(0x9c4) | DC_HPDx_RX_INT_TIMER(0xfa);
-			if (ASIC_IS_DCE32(rdev))
-				tmp |= DC_HPDx_EN;
+		if (hpd == RADEON_HPD_NONE)
+			continue;
 
-			switch (radeon_connector->hpd.hpd) {
-			case RADEON_HPD_1:
-				WREG32(DC_HPD1_CONTROL, tmp);
-				break;
-			case RADEON_HPD_2:
-				WREG32(DC_HPD2_CONTROL, tmp);
-				break;
-			case RADEON_HPD_3:
-				WREG32(DC_HPD3_CONTROL, tmp);
-				break;
-			case RADEON_HPD_4:
-				WREG32(DC_HPD4_CONTROL, tmp);
-				break;
-				/* DCE 3.2 */
-			case RADEON_HPD_5:
-				WREG32(DC_HPD5_CONTROL, tmp);
-				break;
-			case RADEON_HPD_6:
-				WREG32(DC_HPD6_CONTROL, tmp);
-				break;
-			default:
-				break;
-			}
-		} else {
-			switch (radeon_connector->hpd.hpd) {
-			case RADEON_HPD_1:
-				WREG32(DC_HOT_PLUG_DETECT1_CONTROL, DC_HOT_PLUG_DETECTx_EN);
-				break;
-			case RADEON_HPD_2:
-				WREG32(DC_HOT_PLUG_DETECT2_CONTROL, DC_HOT_PLUG_DETECTx_EN);
-				break;
-			case RADEON_HPD_3:
-				WREG32(DC_HOT_PLUG_DETECT3_CONTROL, DC_HOT_PLUG_DETECTx_EN);
-				break;
-			default:
-				break;
-			}
-		}
-		if (radeon_connector->hpd.hpd != RADEON_HPD_NONE)
-			enable |= 1 << radeon_connector->hpd.hpd;
-		radeon_hpd_set_polarity(rdev, radeon_connector->hpd.hpd);
+		WREG32(reg_table->hpd_control[hpd], reg_table->hpd_init_val);
+
+		enable |= 1 << hpd;
+		radeon_hpd_set_polarity(rdev, hpd);
 	}
 	radeon_irq_kms_enable_hpd(rdev, enable);
 }
@@ -1013,51 +977,20 @@ void r600_hpd_fini(struct radeon_device *rdev)
 {
 	struct drm_device *dev = rdev->ddev;
 	struct drm_connector *connector;
+	const struct r600_irq_reg_table *reg_table =
+		rdev->config.r600.irq_reg_table;
 	unsigned disable = 0;
 
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
-		struct radeon_connector *radeon_connector = to_radeon_connector(connector);
-		if (ASIC_IS_DCE3(rdev)) {
-			switch (radeon_connector->hpd.hpd) {
-			case RADEON_HPD_1:
-				WREG32(DC_HPD1_CONTROL, 0);
-				break;
-			case RADEON_HPD_2:
-				WREG32(DC_HPD2_CONTROL, 0);
-				break;
-			case RADEON_HPD_3:
-				WREG32(DC_HPD3_CONTROL, 0);
-				break;
-			case RADEON_HPD_4:
-				WREG32(DC_HPD4_CONTROL, 0);
-				break;
-				/* DCE 3.2 */
-			case RADEON_HPD_5:
-				WREG32(DC_HPD5_CONTROL, 0);
-				break;
-			case RADEON_HPD_6:
-				WREG32(DC_HPD6_CONTROL, 0);
-				break;
-			default:
-				break;
-			}
-		} else {
-			switch (radeon_connector->hpd.hpd) {
-			case RADEON_HPD_1:
-				WREG32(DC_HOT_PLUG_DETECT1_CONTROL, 0);
-				break;
-			case RADEON_HPD_2:
-				WREG32(DC_HOT_PLUG_DETECT2_CONTROL, 0);
-				break;
-			case RADEON_HPD_3:
-				WREG32(DC_HOT_PLUG_DETECT3_CONTROL, 0);
-				break;
-			default:
-				break;
-			}
-		}
-		if (radeon_connector->hpd.hpd != RADEON_HPD_NONE)
-			disable |= 1 << radeon_connector->hpd.hpd;
+		struct radeon_connector *radeon_connector =
+			to_radeon_connector(connector);
+		enum radeon_hpd_id hpd = radeon_connector->hpd.hpd;
+
+		if (hpd == RADEON_HPD_NONE)
+			continue;
+
+		WREG32(reg_table->hpd_control[hpd], 0);
+		disable |= 1 << hpd;
 	}
 	radeon_irq_kms_disable_hpd(rdev, disable);
 }
@@ -3614,6 +3547,9 @@ void r600_disable_interrupts(struct radeon_device *rdev)
 
 static void r600_disable_interrupt_state(struct radeon_device *rdev)
 {
+	const struct r600_irq_reg_table *reg_table =
+		rdev->config.r600.irq_reg_table;
+	int i;
 	u32 tmp;
 
 	WREG32(CP_INT_CNTL, CNTX_BUSY_INT_ENABLE | CNTX_EMPTY_INT_ENABLE);
@@ -3626,19 +3562,16 @@ static void r600_disable_interrupt_state(struct radeon_device *rdev)
 	if (ASIC_IS_DCE3(rdev)) {
 		WREG32(DCE3_DACA_AUTODETECT_INT_CONTROL, 0);
 		WREG32(DCE3_DACB_AUTODETECT_INT_CONTROL, 0);
-		tmp = RREG32(DC_HPD1_INT_CONTROL) & DC_HPDx_INT_POLARITY;
-		WREG32(DC_HPD1_INT_CONTROL, tmp);
-		tmp = RREG32(DC_HPD2_INT_CONTROL) & DC_HPDx_INT_POLARITY;
-		WREG32(DC_HPD2_INT_CONTROL, tmp);
-		tmp = RREG32(DC_HPD3_INT_CONTROL) & DC_HPDx_INT_POLARITY;
-		WREG32(DC_HPD3_INT_CONTROL, tmp);
-		tmp = RREG32(DC_HPD4_INT_CONTROL) & DC_HPDx_INT_POLARITY;
-		WREG32(DC_HPD4_INT_CONTROL, tmp);
+	} else {
+		WREG32(DACA_AUTODETECT_INT_CONTROL, 0);
+		WREG32(DACB_AUTODETECT_INT_CONTROL, 0);
+	}
+
+	for_each_reg_in_table(reg_table->hpd_int_control, i)
+		WREG32_AND(reg_table->hpd_int_control[i], DC_HPDx_INT_POLARITY);
+
+	if (ASIC_IS_DCE3(rdev)) {
 		if (ASIC_IS_DCE32(rdev)) {
-			tmp = RREG32(DC_HPD5_INT_CONTROL) & DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD5_INT_CONTROL, tmp);
-			tmp = RREG32(DC_HPD6_INT_CONTROL) & DC_HPDx_INT_POLARITY;
-			WREG32(DC_HPD6_INT_CONTROL, tmp);
 			tmp = RREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET0) & ~HDMI0_AZ_FORMAT_WTRIG_MASK;
 			WREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET0, tmp);
 			tmp = RREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET1) & ~HDMI0_AZ_FORMAT_WTRIG_MASK;
@@ -3650,14 +3583,6 @@ static void r600_disable_interrupt_state(struct radeon_device *rdev)
 			WREG32(DCE3_HDMI1_AUDIO_PACKET_CONTROL, tmp);
 		}
 	} else {
-		WREG32(DACA_AUTODETECT_INT_CONTROL, 0);
-		WREG32(DACB_AUTODETECT_INT_CONTROL, 0);
-		tmp = RREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL) & DC_HOT_PLUG_DETECTx_INT_POLARITY;
-		WREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL, tmp);
-		tmp = RREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL) & DC_HOT_PLUG_DETECTx_INT_POLARITY;
-		WREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL, tmp);
-		tmp = RREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL) & DC_HOT_PLUG_DETECTx_INT_POLARITY;
-		WREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL, tmp);
 		tmp = RREG32(HDMI0_AUDIO_PACKET_CONTROL) & ~HDMI0_AZ_FORMAT_WTRIG_MASK;
 		WREG32(HDMI0_AUDIO_PACKET_CONTROL, tmp);
 		tmp = RREG32(HDMI1_AUDIO_PACKET_CONTROL) & ~HDMI0_AZ_FORMAT_WTRIG_MASK;
@@ -3670,6 +3595,14 @@ int r600_irq_init(struct radeon_device *rdev)
 	int ret = 0;
 	int rb_bufsz;
 	u32 interrupt_cntl, ih_cntl, ih_rb_cntl;
+
+	/* Setup per-generation register mappings */
+	if (ASIC_IS_DCE32(rdev))
+		rdev->config.r600.irq_reg_table = &dce32_irq_reg_table;
+	else if (ASIC_IS_DCE3(rdev))
+		rdev->config.r600.irq_reg_table = &dce3_irq_reg_table;
+	else
+		rdev->config.r600.irq_reg_table = &dce2_irq_reg_table;
 
 	/* allocate ring */
 	ret = r600_ih_ring_alloc(rdev);
@@ -3757,9 +3690,12 @@ void r600_irq_fini(struct radeon_device *rdev)
 
 int r600_irq_set(struct radeon_device *rdev)
 {
+	const struct r600_irq_reg_table *reg_table =
+		rdev->config.r600.irq_reg_table;
+	int i;
 	u32 cp_int_cntl = CNTX_BUSY_INT_ENABLE | CNTX_EMPTY_INT_ENABLE;
 	u32 mode_int = 0;
-	u32 hpd1, hpd2, hpd3, hpd4 = 0, hpd5 = 0, hpd6 = 0;
+	u32 mode_int_mask;
 	u32 grbm_int_cntl = 0;
 	u32 hdmi0, hdmi1;
 	u32 dma_cntl;
@@ -3778,13 +3714,7 @@ int r600_irq_set(struct radeon_device *rdev)
 	}
 
 	if (ASIC_IS_DCE3(rdev)) {
-		hpd1 = RREG32(DC_HPD1_INT_CONTROL) & ~DC_HPDx_INT_EN;
-		hpd2 = RREG32(DC_HPD2_INT_CONTROL) & ~DC_HPDx_INT_EN;
-		hpd3 = RREG32(DC_HPD3_INT_CONTROL) & ~DC_HPDx_INT_EN;
-		hpd4 = RREG32(DC_HPD4_INT_CONTROL) & ~DC_HPDx_INT_EN;
 		if (ASIC_IS_DCE32(rdev)) {
-			hpd5 = RREG32(DC_HPD5_INT_CONTROL) & ~DC_HPDx_INT_EN;
-			hpd6 = RREG32(DC_HPD6_INT_CONTROL) & ~DC_HPDx_INT_EN;
 			hdmi0 = RREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET0) & ~AFMT_AZ_FORMAT_WTRIG_MASK;
 			hdmi1 = RREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET1) & ~AFMT_AZ_FORMAT_WTRIG_MASK;
 		} else {
@@ -3792,9 +3722,6 @@ int r600_irq_set(struct radeon_device *rdev)
 			hdmi1 = RREG32(DCE3_HDMI1_AUDIO_PACKET_CONTROL) & ~HDMI0_AZ_FORMAT_WTRIG_MASK;
 		}
 	} else {
-		hpd1 = RREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL) & ~DC_HPDx_INT_EN;
-		hpd2 = RREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL) & ~DC_HPDx_INT_EN;
-		hpd3 = RREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL) & ~DC_HPDx_INT_EN;
 		hdmi0 = RREG32(HDMI0_AUDIO_PACKET_CONTROL) & ~HDMI0_AZ_FORMAT_WTRIG_MASK;
 		hdmi1 = RREG32(HDMI1_AUDIO_PACKET_CONTROL) & ~HDMI0_AZ_FORMAT_WTRIG_MASK;
 	}
@@ -3824,40 +3751,22 @@ int r600_irq_set(struct radeon_device *rdev)
 		dma_cntl |= TRAP_ENABLE;
 	}
 
-	if (rdev->irq.crtc_vblank_int[0] ||
-	    atomic_read(&rdev->irq.pflip[0])) {
-		DRM_DEBUG("r600_irq_set: vblank 0\n");
-		mode_int |= D1MODE_VBLANK_INT_MASK;
+	mode_int_mask = RREG32(DxMODE_INT_MASK);
+	for (i = 0; i < 2; i++) {
+		const char *action;
+
+		if (rdev->irq.crtc_vblank_int[i] ||
+		    atomic_read(&rdev->irq.pflip[i])) {
+			mode_int |= DxMODE_VBLANK_INT_MASK(i);
+			action = "enabled";
+		} else
+			action = "disabled";
+
+		if ((mode_int & DxMODE_VBLANK_INT_MASK(i)) !=
+		    (mode_int_mask & DxMODE_VBLANK_INT_MASK(i)))
+			DRM_DEBUG("r600_irq_set: vblank %d %s\n", i, action);
 	}
-	if (rdev->irq.crtc_vblank_int[1] ||
-	    atomic_read(&rdev->irq.pflip[1])) {
-		DRM_DEBUG("r600_irq_set: vblank 1\n");
-		mode_int |= D2MODE_VBLANK_INT_MASK;
-	}
-	if (rdev->irq.hpd[0]) {
-		DRM_DEBUG("r600_irq_set: hpd 1\n");
-		hpd1 |= DC_HPDx_INT_EN;
-	}
-	if (rdev->irq.hpd[1]) {
-		DRM_DEBUG("r600_irq_set: hpd 2\n");
-		hpd2 |= DC_HPDx_INT_EN;
-	}
-	if (rdev->irq.hpd[2]) {
-		DRM_DEBUG("r600_irq_set: hpd 3\n");
-		hpd3 |= DC_HPDx_INT_EN;
-	}
-	if (rdev->irq.hpd[3]) {
-		DRM_DEBUG("r600_irq_set: hpd 4\n");
-		hpd4 |= DC_HPDx_INT_EN;
-	}
-	if (rdev->irq.hpd[4]) {
-		DRM_DEBUG("r600_irq_set: hpd 5\n");
-		hpd5 |= DC_HPDx_INT_EN;
-	}
-	if (rdev->irq.hpd[5]) {
-		DRM_DEBUG("r600_irq_set: hpd 6\n");
-		hpd6 |= DC_HPDx_INT_EN;
-	}
+
 	if (rdev->irq.afmt[0]) {
 		DRM_DEBUG("r600_irq_set: hdmi 0\n");
 		hdmi0 |= HDMI0_AZ_FORMAT_WTRIG_MASK;
@@ -3873,14 +3782,15 @@ int r600_irq_set(struct radeon_device *rdev)
 	WREG32(D1GRPH_INTERRUPT_CONTROL, DxGRPH_PFLIP_INT_MASK);
 	WREG32(D2GRPH_INTERRUPT_CONTROL, DxGRPH_PFLIP_INT_MASK);
 	WREG32(GRBM_INT_CNTL, grbm_int_cntl);
+
+	for_each_reg_in_table(reg_table->hpd_int_control, i) {
+		radeon_irq_kms_set_irq_n_enabled(
+		    rdev, reg_table->hpd_int_control[i], DC_HPDx_INT_EN,
+		    rdev->irq.hpd[i], "HPD", i);
+	}
+
 	if (ASIC_IS_DCE3(rdev)) {
-		WREG32(DC_HPD1_INT_CONTROL, hpd1);
-		WREG32(DC_HPD2_INT_CONTROL, hpd2);
-		WREG32(DC_HPD3_INT_CONTROL, hpd3);
-		WREG32(DC_HPD4_INT_CONTROL, hpd4);
 		if (ASIC_IS_DCE32(rdev)) {
-			WREG32(DC_HPD5_INT_CONTROL, hpd5);
-			WREG32(DC_HPD6_INT_CONTROL, hpd6);
 			WREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET0, hdmi0);
 			WREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET1, hdmi1);
 		} else {
@@ -3888,9 +3798,6 @@ int r600_irq_set(struct radeon_device *rdev)
 			WREG32(DCE3_HDMI1_AUDIO_PACKET_CONTROL, hdmi1);
 		}
 	} else {
-		WREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL, hpd1);
-		WREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL, hpd2);
-		WREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL, hpd3);
 		WREG32(HDMI0_AUDIO_PACKET_CONTROL, hdmi0);
 		WREG32(HDMI1_AUDIO_PACKET_CONTROL, hdmi1);
 	}
@@ -3908,12 +3815,16 @@ int r600_irq_set(struct radeon_device *rdev)
 
 static void r600_irq_ack(struct radeon_device *rdev)
 {
+	const struct r600_irq_reg_table *reg_table =
+		rdev->config.r600.irq_reg_table;
+	u32 *disp_int = rdev->irq.stat_regs.r600.disp_int;
+	int i;
 	u32 tmp;
 
+	for_each_reg_in_table(reg_table->disp_int, i)
+		disp_int[i] = RREG32(reg_table->disp_int[i]);
+
 	if (ASIC_IS_DCE3(rdev)) {
-		rdev->irq.stat_regs.r600.disp_int = RREG32(DCE3_DISP_INTERRUPT_STATUS);
-		rdev->irq.stat_regs.r600.disp_int_cont = RREG32(DCE3_DISP_INTERRUPT_STATUS_CONTINUE);
-		rdev->irq.stat_regs.r600.disp_int_cont2 = RREG32(DCE3_DISP_INTERRUPT_STATUS_CONTINUE2);
 		if (ASIC_IS_DCE32(rdev)) {
 			rdev->irq.stat_regs.r600.hdmi0_status = RREG32(AFMT_STATUS + DCE3_HDMI_OFFSET0);
 			rdev->irq.stat_regs.r600.hdmi1_status = RREG32(AFMT_STATUS + DCE3_HDMI_OFFSET1);
@@ -3922,9 +3833,6 @@ static void r600_irq_ack(struct radeon_device *rdev)
 			rdev->irq.stat_regs.r600.hdmi1_status = RREG32(DCE3_HDMI1_STATUS);
 		}
 	} else {
-		rdev->irq.stat_regs.r600.disp_int = RREG32(DISP_INTERRUPT_STATUS);
-		rdev->irq.stat_regs.r600.disp_int_cont = RREG32(DISP_INTERRUPT_STATUS_CONTINUE);
-		rdev->irq.stat_regs.r600.disp_int_cont2 = 0;
 		rdev->irq.stat_regs.r600.hdmi0_status = RREG32(HDMI0_STATUS);
 		rdev->irq.stat_regs.r600.hdmi1_status = RREG32(HDMI1_STATUS);
 	}
@@ -3935,63 +3843,21 @@ static void r600_irq_ack(struct radeon_device *rdev)
 		WREG32(D1GRPH_INTERRUPT_STATUS, DxGRPH_PFLIP_INT_CLEAR);
 	if (rdev->irq.stat_regs.r600.d2grph_int & DxGRPH_PFLIP_INT_OCCURRED)
 		WREG32(D2GRPH_INTERRUPT_STATUS, DxGRPH_PFLIP_INT_CLEAR);
-	if (rdev->irq.stat_regs.r600.disp_int & LB_D1_VBLANK_INTERRUPT)
-		WREG32(D1MODE_VBLANK_STATUS, DxMODE_VBLANK_ACK);
-	if (rdev->irq.stat_regs.r600.disp_int & LB_D1_VLINE_INTERRUPT)
-		WREG32(D1MODE_VLINE_STATUS, DxMODE_VLINE_ACK);
-	if (rdev->irq.stat_regs.r600.disp_int & LB_D2_VBLANK_INTERRUPT)
-		WREG32(D2MODE_VBLANK_STATUS, DxMODE_VBLANK_ACK);
-	if (rdev->irq.stat_regs.r600.disp_int & LB_D2_VLINE_INTERRUPT)
-		WREG32(D2MODE_VLINE_STATUS, DxMODE_VLINE_ACK);
-	if (rdev->irq.stat_regs.r600.disp_int & DC_HPD1_INTERRUPT) {
-		if (ASIC_IS_DCE3(rdev)) {
-			tmp = RREG32(DC_HPD1_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HPD1_INT_CONTROL, tmp);
-		} else {
-			tmp = RREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HOT_PLUG_DETECT1_INT_CONTROL, tmp);
-		}
+
+	for (i = 0; i < 2; i++) {
+		if (disp_int[0] & LB_Dx_VBLANK_INTERRUPT(i))
+			WREG32(DxMODE_VBLANK_STATUS(i), DxMODE_VBLANK_ACK);
+		if (disp_int[0] & LB_Dx_VLINE_INTERRUPT(i))
+			WREG32(DxMODE_VLINE_STATUS(i), DxMODE_VLINE_ACK);
 	}
-	if (rdev->irq.stat_regs.r600.disp_int & DC_HPD2_INTERRUPT) {
-		if (ASIC_IS_DCE3(rdev)) {
-			tmp = RREG32(DC_HPD2_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HPD2_INT_CONTROL, tmp);
-		} else {
-			tmp = RREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HOT_PLUG_DETECT2_INT_CONTROL, tmp);
-		}
+
+	for_each_reg_in_table(reg_table->hpd_int_control, i) {
+		if (disp_int[i / 2] & hpd_int_mask[i])
+			WREG32_OR(reg_table->hpd_int_control[i],
+				  DC_HPDx_INT_ACK);
 	}
-	if (rdev->irq.stat_regs.r600.disp_int_cont & DC_HPD3_INTERRUPT) {
-		if (ASIC_IS_DCE3(rdev)) {
-			tmp = RREG32(DC_HPD3_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HPD3_INT_CONTROL, tmp);
-		} else {
-			tmp = RREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HOT_PLUG_DETECT3_INT_CONTROL, tmp);
-		}
-	}
-	if (rdev->irq.stat_regs.r600.disp_int_cont & DC_HPD4_INTERRUPT) {
-		tmp = RREG32(DC_HPD4_INT_CONTROL);
-		tmp |= DC_HPDx_INT_ACK;
-		WREG32(DC_HPD4_INT_CONTROL, tmp);
-	}
+
 	if (ASIC_IS_DCE32(rdev)) {
-		if (rdev->irq.stat_regs.r600.disp_int_cont2 & DC_HPD5_INTERRUPT) {
-			tmp = RREG32(DC_HPD5_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HPD5_INT_CONTROL, tmp);
-		}
-		if (rdev->irq.stat_regs.r600.disp_int_cont2 & DC_HPD6_INTERRUPT) {
-			tmp = RREG32(DC_HPD6_INT_CONTROL);
-			tmp |= DC_HPDx_INT_ACK;
-			WREG32(DC_HPD6_INT_CONTROL, tmp);
-		}
 		if (rdev->irq.stat_regs.r600.hdmi0_status & AFMT_AZ_FORMAT_WTRIG) {
 			tmp = RREG32(AFMT_AUDIO_PACKET_CONTROL + DCE3_HDMI_OFFSET0);
 			tmp |= AFMT_AZ_FORMAT_WTRIG_ACK;
@@ -4088,10 +3954,14 @@ static u32 r600_get_ih_wptr(struct radeon_device *rdev)
 
 int r600_irq_process(struct radeon_device *rdev)
 {
+	char *event_name;
+	u32 *disp_int = rdev->irq.stat_regs.r600.disp_int;
+	int hpd_idx, vbl_idx;
 	u32 wptr;
 	u32 rptr;
 	u32 src_id, src_data;
 	u32 ring_index;
+	u32 mask;
 	bool queue_hotplug = false;
 	bool queue_hdmi = false;
 	bool queue_thermal = false;
@@ -4127,64 +3997,34 @@ restart_ih:
 
 		switch (src_id) {
 		case 1: /* D1 vblank/vline */
-			switch (src_data) {
-			case 0: /* D1 vblank */
-				if (!(rdev->irq.stat_regs.r600.disp_int & LB_D1_VBLANK_INTERRUPT))
-					DRM_DEBUG("IH: D1 vblank - IH event w/o asserted irq bit?\n");
-
-				if (rdev->irq.crtc_vblank_int[0]) {
-					drm_handle_vblank(rdev->ddev, 0);
-					rdev->pm.vblank_sync = true;
-					wake_up(&rdev->irq.vblank_queue);
-				}
-				if (atomic_read(&rdev->irq.pflip[0]))
-					radeon_crtc_handle_vblank(rdev, 0);
-				rdev->irq.stat_regs.r600.disp_int &= ~LB_D1_VBLANK_INTERRUPT;
-				DRM_DEBUG("IH: D1 vblank\n");
-
-				break;
-			case 1: /* D1 vline */
-				if (!(rdev->irq.stat_regs.r600.disp_int & LB_D1_VLINE_INTERRUPT))
-				    DRM_DEBUG("IH: D1 vline - IH event w/o asserted irq bit?\n");
-
-				rdev->irq.stat_regs.r600.disp_int &= ~LB_D1_VLINE_INTERRUPT;
-				DRM_DEBUG("IH: D1 vline\n");
-
-				break;
-			default:
-				DRM_DEBUG("Unhandled interrupt: %d %d\n", src_id, src_data);
-				break;
-			}
-			break;
 		case 5: /* D2 vblank/vline */
-			switch (src_data) {
-			case 0: /* D2 vblank */
-				if (!(rdev->irq.stat_regs.r600.disp_int & LB_D2_VBLANK_INTERRUPT))
-					DRM_DEBUG("IH: D2 vblank - IH event w/o asserted irq bit?\n");
+			vbl_idx = (src_id == 5);
 
-				if (rdev->irq.crtc_vblank_int[1]) {
-					drm_handle_vblank(rdev->ddev, 1);
+			if (src_data == 0) {
+				mask = LB_Dx_VBLANK_INTERRUPT(vbl_idx);
+				event_name = "vblank";
+
+				if (rdev->irq.crtc_vblank_int[vbl_idx]) {
+					drm_handle_vblank(rdev->ddev, vbl_idx);
 					rdev->pm.vblank_sync = true;
 					wake_up(&rdev->irq.vblank_queue);
 				}
-				if (atomic_read(&rdev->irq.pflip[1]))
-					radeon_crtc_handle_vblank(rdev, 1);
-				rdev->irq.stat_regs.r600.disp_int &= ~LB_D2_VBLANK_INTERRUPT;
-				DRM_DEBUG("IH: D2 vblank\n");
+				if (atomic_read(&rdev->irq.pflip[vbl_idx])) {
+					radeon_crtc_handle_vblank(rdev,
+								  vbl_idx);
+				}
+			} else if (src_data == 1) {
+				mask = LB_Dx_VLINE_INTERRUPT(vbl_idx);
+				event_name = "vline";
+			} else
+				goto unhandled;
 
-				break;
-			case 1: /* D1 vline */
-				if (!(rdev->irq.stat_regs.r600.disp_int & LB_D2_VLINE_INTERRUPT))
-					DRM_DEBUG("IH: D2 vline - IH event w/o asserted irq bit?\n");
+			if (!(disp_int[0] & mask))
+				DRM_DEBUG("IH: D%d %s - IH event w/o asserted irq bit?\n",
+					  vbl_idx, event_name);
 
-				rdev->irq.stat_regs.r600.disp_int &= ~LB_D2_VLINE_INTERRUPT;
-				DRM_DEBUG("IH: D2 vline\n");
-
-				break;
-			default:
-				DRM_DEBUG("Unhandled interrupt: %d %d\n", src_id, src_data);
-				break;
-			}
+			disp_int[0] &= ~mask;
+			DRM_DEBUG("IH: D%d %s\n", vbl_idx, event_name);
 			break;
 		case 9: /* D1 pflip */
 			DRM_DEBUG("IH: D1 flip\n");
@@ -4198,59 +4038,23 @@ restart_ih:
 			break;
 		case 19: /* HPD/DAC hotplug */
 			switch (src_data) {
-			case 0:
-				if (!(rdev->irq.stat_regs.r600.disp_int & DC_HPD1_INTERRUPT))
-					DRM_DEBUG("IH: HPD1 - IH event w/o asserted irq bit?\n");
-
-				rdev->irq.stat_regs.r600.disp_int &= ~DC_HPD1_INTERRUPT;
-				queue_hotplug = true;
-				DRM_DEBUG("IH: HPD1\n");
-				break;
-			case 1:
-				if (!(rdev->irq.stat_regs.r600.disp_int & DC_HPD2_INTERRUPT))
-					DRM_DEBUG("IH: HPD2 - IH event w/o asserted irq bit?\n");
-
-				rdev->irq.stat_regs.r600.disp_int &= ~DC_HPD2_INTERRUPT;
-				queue_hotplug = true;
-				DRM_DEBUG("IH: HPD2\n");
-				break;
-			case 4:
-				if (!(rdev->irq.stat_regs.r600.disp_int_cont & DC_HPD3_INTERRUPT))
-					DRM_DEBUG("IH: HPD3 - IH event w/o asserted irq bit?\n");
-
-				rdev->irq.stat_regs.r600.disp_int_cont &= ~DC_HPD3_INTERRUPT;
-				queue_hotplug = true;
-				DRM_DEBUG("IH: HPD3\n");
-				break;
-			case 5:
-				if (!(rdev->irq.stat_regs.r600.disp_int_cont & DC_HPD4_INTERRUPT))
-					DRM_DEBUG("IH: HPD4 - IH event w/o asserted irq bit?\n");
-
-				rdev->irq.stat_regs.r600.disp_int_cont &= ~DC_HPD4_INTERRUPT;
-				queue_hotplug = true;
-				DRM_DEBUG("IH: HPD4\n");
-				break;
-			case 10:
-				if (!(rdev->irq.stat_regs.r600.disp_int_cont2 & DC_HPD5_INTERRUPT))
-					DRM_DEBUG("IH: HPD5 - IH event w/o asserted irq bit?\n");
-
-				rdev->irq.stat_regs.r600.disp_int_cont2 &= ~DC_HPD5_INTERRUPT;
-				queue_hotplug = true;
-				DRM_DEBUG("IH: HPD5\n");
-				break;
-			case 12:
-				if (!(rdev->irq.stat_regs.r600.disp_int_cont2 & DC_HPD6_INTERRUPT))
-					DRM_DEBUG("IH: HPD6 - IH event w/o asserted irq bit?\n");
-
-				rdev->irq.stat_regs.r600.disp_int_cont2 &= ~DC_HPD6_INTERRUPT;
-				queue_hotplug = true;
-				DRM_DEBUG("IH: HPD6\n");
-
-				break;
+			case 0:  hpd_idx = 0; break;
+			case 1:  hpd_idx = 1; break;
+			case 4:  hpd_idx = 2; break;
+			case 5:  hpd_idx = 3; break;
+			case 10: hpd_idx = 4; break;
+			case 12: hpd_idx = 5; break;
 			default:
-				DRM_DEBUG("Unhandled interrupt: %d %d\n", src_id, src_data);
-				break;
+				 goto unhandled;
 			}
+
+			if (!(disp_int[hpd_idx / 2] & hpd_int_mask[hpd_idx]))
+				DRM_DEBUG("IH: HPD%d - IH event w/o asserted irq bit?\n",
+					  hpd_idx);
+
+			disp_int[hpd_idx / 2] &= ~hpd_int_mask[hpd_idx];
+			queue_hotplug = true;
+			DRM_DEBUG("IH: HPD%d\n", hpd_idx);
 			break;
 		case 21: /* hdmi */
 			switch (src_data) {
@@ -4309,6 +4113,7 @@ restart_ih:
 			DRM_DEBUG("IH: GUI idle\n");
 			break;
 		default:
+unhandled:
 			DRM_DEBUG("Unhandled interrupt: %d %d\n", src_id, src_data);
 			break;
 		}

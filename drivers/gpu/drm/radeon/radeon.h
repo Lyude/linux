@@ -757,9 +757,7 @@ struct r500_irq_stat_regs {
 };
 
 struct r600_irq_stat_regs {
-	u32 disp_int;
-	u32 disp_int_cont;
-	u32 disp_int_cont2;
+	u32 disp_int[6];
 	u32 d1grph_int;
 	u32 d2grph_int;
 	u32 hdmi0_status;
@@ -2002,6 +2000,14 @@ struct r300_asic {
 	u32			hdp_cntl;
 };
 
+struct r600_irq_reg_table {
+	u32 disp_int[3];
+	u32 hpd_control[6];
+	u32 hpd_int_control[6];
+	u32 hpd_int_stat[6];
+	u32 hpd_init_val;
+};
+
 struct r600_asic {
 	unsigned		max_pipes;
 	unsigned		max_tile_pipes;
@@ -2022,6 +2028,8 @@ struct r600_asic {
 	unsigned		tile_config;
 	unsigned		backend_map;
 	unsigned		active_simds;
+
+	const struct r600_irq_reg_table *irq_reg_table;
 };
 
 struct rv770_asic {
