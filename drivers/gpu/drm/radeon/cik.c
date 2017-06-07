@@ -7215,7 +7215,6 @@ static inline void cik_irq_ack(struct radeon_device *rdev)
 {
 	u32 *disp_int = rdev->irq.stat_regs.cik.disp_int;
 	u32 *grph_int = rdev->irq.stat_regs.cik.grph_int;
-	u32 tmp;
 	int i, j;
 
 	for (i = 0; i < 7; i++) {
