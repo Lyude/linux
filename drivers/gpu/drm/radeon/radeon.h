@@ -760,8 +760,7 @@ struct r600_irq_stat_regs {
 	u32 disp_int[6];
 	u32 d1grph_int;
 	u32 d2grph_int;
-	u32 hdmi0_status;
-	u32 hdmi1_status;
+	u32 hdmi_status[2];
 };
 
 struct evergreen_irq_stat_regs {
@@ -2006,6 +2005,9 @@ struct r600_irq_reg_table {
 	u32 hpd_int_control[6];
 	u32 hpd_int_stat[6];
 	u32 hpd_init_val;
+
+	u32 hdmi_stat[2];
+	u32 hdmi_control[2];
 };
 
 struct r600_asic {
