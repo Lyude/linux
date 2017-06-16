@@ -21,6 +21,7 @@
  *
  * Authors: Martin Peres
  */
+#include <nvkm/core/option.h>
 #include "priv.h"
 
 int
@@ -356,12 +357,66 @@ nvkm_therm_init(struct nvkm_subdev *subdev)
 	return 0;
 }
 
+static inline enum nvkm_therm_clkgate_level
+nvkm_therm_clkgate_level(const struct nvkm_therm *therm)
+{
+	static bool __read_mostly cached = false;
+	static enum nvkm_therm_clkgate_level __read_mostly level =
+		NVKM_THERM_CLKGATE_NONE;
+
+	if (!cached) {
+		cached = true;
+		level = nvkm_longopt(therm->subdev.device->cfgopt,
+				     "NvPmEnableGating",
+				     NVKM_THERM_CLKGATE_NONE);
+	}
+
+	return level;
+}
+
+#define pack_for_each_init(init, pack, head)                                   \
+	for (pack = head; pack && pack->init; pack++)                          \
+		  for (init = pack->init; init && init->count; init++)
+
+void
+nvkm_therm_clkgate_mmio(struct nvkm_therm *therm,
+			const struct nvkm_therm_clkgate_pack *p)
+{
+	struct nvkm_device *device = therm->subdev.device;
+	const struct nvkm_therm_clkgate_pack *pack;
+	const struct nvkm_therm_clkgate_init *init;
+
+	pack_for_each_init(init, pack, p) {
+		u32 next, addr;
+
+		if (pack->level > nvkm_therm_clkgate_level(therm))
+			continue;
+
+		next = init->addr + init->count * init->pitch;
+		addr = init->addr;
+		while (addr < next) {
+			nvkm_wr32(device, addr, init->data);
+			addr += init->pitch;
+		}
+	}
+}
+
 void
 nvkm_therm_clkgate_engine(struct nvkm_therm *therm, enum nvkm_devidx engine,
 			  bool enable)
 {
 	if (therm->func->clkgate_engine)
 		therm->func->clkgate_engine(therm, engine, enable);
+}
+
+void
+nvkm_therm_clkgate_init(struct nvkm_therm *therm,
+			const struct nvkm_therm_clkgate_pack *p)
+{
+	if (!nvkm_therm_clkgate_level(therm) || !therm->func->clkgate_init)
+		return;
+
+	therm->func->clkgate_init(therm, p);
 }
 
 static void *

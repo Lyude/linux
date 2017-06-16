@@ -59,6 +59,13 @@ gf100_clkgate_engine(struct nvkm_therm *therm, enum nvkm_devidx subdev,
 	nvkm_mask(therm->subdev.device, 0x20200 + offset, 0xff, data);
 }
 
+void
+gf100_clkgate_init(struct nvkm_therm *therm,
+		   const struct nvkm_therm_clkgate_pack *p)
+{
+	nvkm_therm_clkgate_mmio(therm, p);
+}
+
 static const struct nvkm_therm_func
 gf100_therm_func = {
 	.init = gt215_therm_init,
@@ -70,7 +77,11 @@ gf100_therm_func = {
 	.temp_get = g84_temp_get,
 	.fan_sense = gt215_therm_fan_sense,
 	.program_alarms = nvkm_therm_program_alarms_polling,
-	.clkgate_engine = gf100_clkgate_engine,
+	/* TODO: Enable clockgating here
+	 * Currently not enabled because we have no way of testing
+	 * different performance levels due to fermi's reclocking being
+	 * broken
+	 */
 };
 
 int

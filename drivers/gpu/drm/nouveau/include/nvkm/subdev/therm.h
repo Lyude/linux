@@ -5,6 +5,7 @@
 #include <subdev/bios.h>
 #include <subdev/bios/therm.h>
 #include <subdev/timer.h>
+#include <subdev/fb.h>
 
 enum nvkm_therm_thrs_direction {
 	NVKM_THERM_THRS_FALLING = 0,
@@ -43,6 +44,25 @@ enum nvkm_therm_attr_type {
 	NVKM_THERM_ATTR_THRS_CRITICAL_HYST = 15,
 	NVKM_THERM_ATTR_THRS_SHUTDOWN = 16,
 	NVKM_THERM_ATTR_THRS_SHUTDOWN_HYST = 17,
+};
+
+enum nvkm_therm_clkgate_level {
+	NVKM_THERM_CLKGATE_NONE = 0,
+	NVKM_THERM_CLKGATE_BLCG,
+	NVKM_THERM_CLKGATE_SLCG,
+	NVKM_THERM_CLKGATE_ELPG,
+};
+
+struct nvkm_therm_clkgate_init {
+	u32 addr;
+	u8  count;
+	u8  pitch;
+	u32 data;
+};
+
+struct nvkm_therm_clkgate_pack {
+	enum nvkm_therm_clkgate_level level;
+	const struct nvkm_therm_clkgate_init *init;
 };
 
 struct nvkm_therm {
@@ -90,6 +110,8 @@ int nvkm_therm_temp_get(struct nvkm_therm *);
 int nvkm_therm_fan_sense(struct nvkm_therm *);
 int nvkm_therm_cstate(struct nvkm_therm *, int, int);
 void nvkm_therm_clkgate_engine(struct nvkm_therm *, enum nvkm_devidx, bool);
+void nvkm_therm_clkgate_init(struct nvkm_therm *,
+			     const struct nvkm_therm_clkgate_pack *);
 
 int nv40_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int nv50_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
@@ -97,6 +119,7 @@ int g84_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gt215_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gf100_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gf119_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
+int gk104_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gm107_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int gm200_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 #endif

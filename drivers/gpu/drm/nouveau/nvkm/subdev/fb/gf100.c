@@ -102,8 +102,13 @@ gf100_fb_init(struct nvkm_fb *base)
 	struct gf100_fb *fb = gf100_fb(base);
 	struct nvkm_device *device = fb->base.subdev.device;
 
-	if (fb->r100c10_page)
-		nvkm_wr32(device, 0x100c10, fb->r100c10 >> 8);
+	if (!fb->r100c10_page)
+		return;
+
+	nvkm_wr32(device, 0x100c10, fb->r100c10 >> 8);
+
+	if (base->func->clkgate_init)
+		base->func->clkgate_init(base);
 }
 
 void *
