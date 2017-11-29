@@ -20,9 +20,62 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors: Ben Skeggs
+ *          Lyude Paul
  */
 #include "gf100.h"
 #include "ram.h"
+
+/*
+ *******************************************************************************
+ * PGRAPH registers for clockgating
+ *******************************************************************************
+ */
+static const struct nvkm_therm_clkgate_init
+gk104_fb_clkgate_blcg_unk_1[] = {
+	{ 0x100d10, 1, 0x08, 0x0000c244 },
+	{ 0x100d30, 1, 0x08, 0x0000c242 },
+	{ 0x100d3c, 1, 0x08, 0x00000242 },
+	{ 0x100d48, 1, 0x08, 0x00000242 },
+	{ 0x100d1c, 1, 0x08, 0x00000042 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gk104_fb_clkgate_blcg_vm_1[] = {
+	{ 0x100c98, 1, 0x08, 0x00000242 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gk104_fb_clkgate_blcg_hw_blk_1[] = {
+	{ 0x10f000, 1, 0x08, 0x00000042 },
+	{ 0x17e030, 1, 0x08, 0x00000044 },
+	{ 0x17e040, 1, 0x08, 0x00000044 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gk104_fb_clkgate_blcg_bcast_1[] = {
+	{ 0x17ea60, 4, 0x08, 0x00000044 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_pack
+gk104_fb_clkgate_init_pack[] = {
+	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_unk_1 },
+	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_vm_1 },
+	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_hw_blk_1 },
+	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_bcast_1 },
+	{}
+};
+
+void
+gk104_fb_clkgate_init(struct nvkm_fb *fb)
+{
+	struct nvkm_therm *therm = fb->subdev.device->therm;
+
+	nvkm_therm_clkgate_init(therm, gk104_fb_clkgate_init_pack);
+}
 
 static const struct nvkm_fb_func
 gk104_fb = {
@@ -33,6 +86,7 @@ gk104_fb = {
 	.intr = gf100_fb_intr,
 	.ram_new = gk104_ram_new,
 	.memtype_valid = gf100_fb_memtype_valid,
+	.clkgate_init = gk104_fb_clkgate_init,
 };
 
 int

@@ -310,7 +310,7 @@ nvkm_therm_clkgate_level(const struct nvkm_therm *therm)
 		level = nvkm_longopt(therm->subdev.device->cfgopt,
 				     "NvPmEnableGating",
 				     NVKM_THERM_CLKGATE_NONE);
-		level = min((int)level, NVKM_THERM_CLKGATE_CG);
+		level = min((int)level, NVKM_THERM_CLKGATE_BLCG);
 	}
 
 	return level;
@@ -327,8 +327,9 @@ nvkm_therm_clkgate_enable(struct nvkm_therm *therm, bool enable)
 		return;
 
 	switch(clkgate_level) {
-	case NVKM_THERM_CLKGATE_CG: clkgate_str = "CG"; break;
-	default:                    clkgate_str = "???"; break;
+	case NVKM_THERM_CLKGATE_CG:   clkgate_str = "CG"; break;
+	case NVKM_THERM_CLKGATE_BLCG: clkgate_str = "BLCG"; break;
+	default:                      clkgate_str = "???"; break;
 	}
 
 	therm->func->clkgate_enable(therm, enable);
@@ -402,6 +403,43 @@ nvkm_therm_init(struct nvkm_subdev *subdev)
 	nvkm_therm_sensor_init(therm);
 	nvkm_therm_fan_init(therm);
 	return 0;
+}
+
+#define pack_for_each_init(init, pack, head)                                   \
+	for (pack = head; pack && pack->init; pack++)                          \
+		  for (init = pack->init; init && init->count; init++)
+
+void
+nvkm_therm_clkgate_mmio(struct nvkm_therm *therm,
+			const struct nvkm_therm_clkgate_pack *p)
+{
+	struct nvkm_device *device = therm->subdev.device;
+	const struct nvkm_therm_clkgate_pack *pack;
+	const struct nvkm_therm_clkgate_init *init;
+
+	pack_for_each_init(init, pack, p) {
+		u32 next, addr;
+
+		if (pack->level > nvkm_therm_clkgate_level(therm))
+			continue;
+
+		next = init->addr + init->count * init->pitch;
+		addr = init->addr;
+		while (addr < next) {
+			nvkm_wr32(device, addr, init->data);
+			addr += init->pitch;
+		}
+	}
+}
+
+void
+nvkm_therm_clkgate_init(struct nvkm_therm *therm,
+			const struct nvkm_therm_clkgate_pack *p)
+{
+	if (!nvkm_therm_clkgate_level(therm) || !therm->func->clkgate_init)
+		return;
+
+	therm->func->clkgate_init(therm, p);
 }
 
 static void *

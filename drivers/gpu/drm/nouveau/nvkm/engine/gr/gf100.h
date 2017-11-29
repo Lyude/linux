@@ -29,6 +29,7 @@
 #include <core/gpuobj.h>
 #include <subdev/ltc.h>
 #include <subdev/mmu.h>
+#include <subdev/therm.h>
 #include <engine/falcon.h>
 
 #define GPC_MAX 32
@@ -137,6 +138,7 @@ struct gf100_gr_func {
 	int (*rops)(struct gf100_gr *);
 	int ppc_nr;
 	const struct gf100_grctx_func *grctx;
+	const struct nvkm_therm_clkgate_pack *clkgate_init;
 	struct nvkm_sclass sclass[];
 };
 
