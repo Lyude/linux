@@ -49,6 +49,18 @@ enum nvkm_therm_attr_type {
 enum nvkm_therm_clkgate_level {
 	NVKM_THERM_CLKGATE_NONE = 0,
 	NVKM_THERM_CLKGATE_CG, /* basic clockgating */
+	NVKM_THERM_CLKGATE_BLCG,
+};
+
+struct nvkm_therm_clkgate_init {
+	u32 addr;
+	u8  count;
+	u32 data;
+};
+
+struct nvkm_therm_clkgate_pack {
+	enum nvkm_therm_clkgate_level level;
+	const struct nvkm_therm_clkgate_init **init;
 };
 
 struct nvkm_therm {
@@ -98,6 +110,8 @@ int nvkm_therm_temp_get(struct nvkm_therm *);
 int nvkm_therm_fan_sense(struct nvkm_therm *);
 int nvkm_therm_cstate(struct nvkm_therm *, int, int);
 void nvkm_therm_clkgate_set(struct nvkm_therm *, bool);
+void nvkm_therm_clkgate_init(struct nvkm_therm *,
+			     const struct nvkm_therm_clkgate_pack *);
 
 int nv40_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
 int nv50_therm_new(struct nvkm_device *, int, struct nvkm_therm **);
