@@ -28,7 +28,6 @@
 #include <core/option.h>
 
 #include <subdev/bios.h>
-#include <subdev/therm.h>
 
 static DEFINE_MUTEX(nv_devices_mutex);
 static LIST_HEAD(nv_devices);
@@ -2592,7 +2591,6 @@ nvkm_device_init(struct nvkm_device *device)
 	}
 
 	nvkm_acpi_init(device);
-	nvkm_therm_clkgate_set(device->therm, true);
 
 	time = ktime_to_us(ktime_get()) - time;
 	nvdev_trace(device, "init completed in %lldus\n", time);

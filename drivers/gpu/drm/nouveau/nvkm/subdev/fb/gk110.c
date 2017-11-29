@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Red Hat Inc.
+ * Copyright 2017 Red Hat Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,72 +19,56 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
- * Authors: Ben Skeggs
- *          Lyude Paul
+ * Authors: Lyude Paul
  */
 #include "gf100.h"
+#include "gk104.h"
 #include "ram.h"
+#include <subdev/therm.h>
+#include <subdev/fb.h>
 
 /*
  *******************************************************************************
  * PGRAPH registers for clockgating
  *******************************************************************************
  */
-const struct nvkm_therm_clkgate_init
-gk104_fb_clkgate_blcg_unk_0[] = {
-	{ 0x100d10, 1, 0x0000c244 },
-	{ 0x100d30, 1, 0x0000c242 },
-	{ 0x100d3c, 1, 0x00000242 },
-	{ 0x100d48, 1, 0x00000242 },
-	{ 0x100d1c, 1, 0x00000042 },
-	{}
-};
+/*const struct nvkm_therm_clkgate_init*/
+/*gk110_fb_debug[] = {*/
+	/*{ 0x100d74, 1, 0x08, 0x0ff35840 },*/
+	/*{ 0x17e878, 1, 0x08, 0x001900ff },*/
+	/*{}*/
+/*};*/
 
 const struct nvkm_therm_clkgate_init
-gk104_fb_clkgate_blcg_vm_0[] = {
-	{ 0x100c98, 1, 0x00000242 },
-	{}
-};
-
-const struct nvkm_therm_clkgate_init
-gk104_fb_clkgate_blcg_main_0[] = {
-	{ 0x10f000, 1, 0x00000042 },
-	{ 0x17e030, 1, 0x00000044 },
-	{ 0x17e040, 1, 0x00000044 },
-	{}
-};
-
-const struct nvkm_therm_clkgate_init
-gk104_fb_clkgate_blcg_bcast_0[] = {
-	{ 0x17ea60, 4, 0x00000044 },
+gk110_fb_clkgate_blcg_unk_0[] = {
+	{ 0x100d10, 1, 0x08, 0x0000c242 },
+	{ 0x100d30, 1, 0x08, 0x0000c242 },
+	{ 0x100d3c, 1, 0x08, 0x00000242 },
+	{ 0x100d48, 1, 0x08, 0x0000c242 },
+	{ 0x100d1c, 1, 0x08, 0x00000042 },
 	{}
 };
 
 static const struct nvkm_therm_clkgate_pack
-gk104_fb_clkgate_init_pack[] = {
-	{
-		NVKM_THERM_CLKGATE_BLCG,
-		(const struct nvkm_therm_clkgate_init*[]) {
-			gk104_fb_clkgate_blcg_unk_0,
-			gk104_fb_clkgate_blcg_vm_0,
-			gk104_fb_clkgate_blcg_main_0,
-			gk104_fb_clkgate_blcg_bcast_0,
-			NULL
-		}
-	},
+gk110_fb_clkgate_init_pack[] = {
+	/*{ NVKM_THERM_CLKGATE_BLCG, gk110_fb_debug },*/
+	{ NVKM_THERM_CLKGATE_BLCG, gk110_fb_clkgate_blcg_unk_0 },
+	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_vm_0 },
+	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_main_0 },
+	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_bcast_0 },
 	{}
 };
 
 void
-gk104_fb_clkgate_init(struct nvkm_fb *fb)
+gk110_fb_clkgate_init(struct nvkm_fb *fb)
 {
 	struct nvkm_therm *therm = fb->subdev.device->therm;
 
-	nvkm_therm_clkgate_init(therm, gk104_fb_clkgate_init_pack);
+	nvkm_therm_clkgate_init(therm, gk110_fb_clkgate_init_pack);
 }
 
 static const struct nvkm_fb_func
-gk104_fb = {
+gk110_fb = {
 	.dtor = gf100_fb_dtor,
 	.oneinit = gf100_fb_oneinit,
 	.init = gf100_fb_init,
@@ -92,11 +76,11 @@ gk104_fb = {
 	.intr = gf100_fb_intr,
 	.ram_new = gk104_ram_new,
 	.memtype_valid = gf100_fb_memtype_valid,
-	.clkgate_init = gk104_fb_clkgate_init,
+	.clkgate_init = gk110_fb_clkgate_init,
 };
 
 int
-gk104_fb_new(struct nvkm_device *device, int index, struct nvkm_fb **pfb)
+gk110_fb_new(struct nvkm_device *device, int index, struct nvkm_fb **pfb)
 {
-	return gf100_fb_new_(&gk104_fb, device, index, pfb);
+	return gf100_fb_new_(&gk110_fb, device, index, pfb);
 }
