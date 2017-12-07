@@ -32,30 +32,29 @@
  * PGRAPH registers for clockgating
  *******************************************************************************
  */
-/*const struct nvkm_therm_clkgate_init*/
-/*gk110_fb_debug[] = {*/
-	/*{ 0x100d74, 1, 0x08, 0x0ff35840 },*/
-	/*{ 0x17e878, 1, 0x08, 0x001900ff },*/
-	/*{}*/
-/*};*/
 
 const struct nvkm_therm_clkgate_init
 gk110_fb_clkgate_blcg_unk_0[] = {
-	{ 0x100d10, 1, 0x08, 0x0000c242 },
-	{ 0x100d30, 1, 0x08, 0x0000c242 },
-	{ 0x100d3c, 1, 0x08, 0x00000242 },
-	{ 0x100d48, 1, 0x08, 0x0000c242 },
-	{ 0x100d1c, 1, 0x08, 0x00000042 },
+	{ 0x100d10, 1, 0x0000c242 },
+	{ 0x100d30, 1, 0x0000c242 },
+	{ 0x100d3c, 1, 0x00000242 },
+	{ 0x100d48, 1, 0x0000c242 },
+	{ 0x100d1c, 1, 0x00000042 },
 	{}
 };
 
 static const struct nvkm_therm_clkgate_pack
 gk110_fb_clkgate_init_pack[] = {
-	/*{ NVKM_THERM_CLKGATE_BLCG, gk110_fb_debug },*/
-	{ NVKM_THERM_CLKGATE_BLCG, gk110_fb_clkgate_blcg_unk_0 },
-	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_vm_0 },
-	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_main_0 },
-	{ NVKM_THERM_CLKGATE_BLCG, gk104_fb_clkgate_blcg_bcast_0 },
+	{
+		NVKM_THERM_CLKGATE_BLCG,
+		(const struct nvkm_therm_clkgate_init*[]) {
+			gk110_fb_clkgate_blcg_unk_0,
+			gk104_fb_clkgate_blcg_vm_0,
+			gk104_fb_clkgate_blcg_main_0,
+			gk104_fb_clkgate_blcg_bcast_0,
+			NULL
+		},
+	},
 	{}
 };
 
