@@ -50,6 +50,7 @@ enum nvkm_therm_clkgate_level {
 	NVKM_THERM_CLKGATE_NONE = 0,
 	NVKM_THERM_CLKGATE_CG, /* basic clockgating */
 	NVKM_THERM_CLKGATE_BLCG,
+	NVKM_THERM_CLKGATE_SLCG,
 };
 
 struct nvkm_therm_clkgate_init {
