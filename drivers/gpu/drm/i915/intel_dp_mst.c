@@ -193,6 +193,10 @@ static void intel_mst_pre_enable_dp(struct intel_encoder *encoder,
 	int ret;
 	uint32_t temp;
 
+	/* clear the link retraining state */
+	intel_dp->mst_link_is_bad = false;
+	intel_dp->mst_link_retrain_count = 0;
+
 	/* MST encoders are bound to a crtc, not to a connector,
 	 * force the mapping here for get_hw_state.
 	 */

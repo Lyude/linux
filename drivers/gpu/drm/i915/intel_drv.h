@@ -327,9 +327,6 @@ struct intel_connector {
 	void *port; /* store this opaque as its illegal to dereference it */
 
 	struct intel_dp *mst_port;
-
-	/* Work struct to schedule a uevent on link train failure */
-	struct work_struct modeset_retry_work;
 };
 
 struct intel_digital_connector_state {
@@ -1024,6 +1021,14 @@ struct intel_dp {
 	struct intel_dp_mst_encoder *mst_encoders[I915_MAX_PIPES];
 	struct drm_dp_mst_topology_mgr mst_mgr;
 
+	/* how many times we've retrained the mst link */
+	int mst_link_retrain_count;
+
+	/* Whether or not we're waiting for userspace to do another modeset
+	 * because the link status was set to bad
+	 */
+	bool mst_link_is_bad;
+
 	uint32_t (*get_aux_clock_divider)(struct intel_dp *dp, int index);
 	/*
 	 * This function returns the value we have to program the AUX_CTL
@@ -1039,6 +1044,9 @@ struct intel_dp {
 
 	/* Displayport compliance testing */
 	struct intel_dp_compliance compliance;
+
+	/* Work struct to schedule a uevent on link train failure */
+	struct work_struct modeset_retry_work;
 };
 
 struct intel_lspcon {

@@ -4200,6 +4200,95 @@ update_status:
 		DRM_DEBUG_KMS("Could not write test response to sink\n");
 }
 
+static void
+intel_dp_retrain_link(struct intel_dp *intel_dp)
+{
+	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
+	struct drm_i915_private *dev_priv =
+		to_i915(intel_dig_port->base.base.dev);
+	struct drm_device *dev = &dev_priv->drm;
+	struct intel_dp_mst_encoder *intel_dp_mst_enc;
+	struct intel_encoder *intel_encoder;
+	struct intel_crtc *crtc;
+	int i;
+	u32 crtc_mask = 0;
+
+	if (intel_dp->is_mst) {
+		for (i = 0; i < ARRAY_SIZE(intel_dp->mst_encoders); i++) {
+			intel_dp_mst_enc = intel_dp->mst_encoders[i];
+			intel_encoder = &intel_dp_mst_enc->base;
+			if (!intel_encoder->base.crtc ||
+			    !to_intel_crtc(intel_encoder->base.crtc)->active)
+				continue;
+
+			/* FIXME */
+			crtc_mask |= drm_crtc_mask(intel_encoder->base.crtc);
+		}
+	} else {
+		crtc_mask = drm_crtc_mask(intel_dig_port->base.base.crtc);
+	}
+
+	/* Suppress underruns caused by re-training */
+	for_each_intel_crtc_mask(dev, crtc, crtc_mask) {
+		intel_set_cpu_fifo_underrun_reporting(dev_priv, crtc->pipe,
+						      false);
+		if (crtc->config->has_pch_encoder) {
+			intel_set_pch_fifo_underrun_reporting(
+			    dev_priv, intel_crtc_pch_transcoder(crtc), false);
+		}
+	}
+
+	intel_dp_start_link_train(intel_dp);
+	intel_dp_stop_link_train(intel_dp);
+
+	for_each_intel_crtc_mask(dev, crtc, crtc_mask) {
+		/* Keep underrun reporting disabled until things are stable */
+		intel_wait_for_vblank(dev_priv, crtc->pipe);
+
+		intel_set_cpu_fifo_underrun_reporting(dev_priv, crtc->pipe,
+						      true);
+		if (crtc->config->has_pch_encoder) {
+			intel_set_pch_fifo_underrun_reporting(
+			    dev_priv, intel_crtc_pch_transcoder(crtc), true);
+		}
+	}
+}
+
+static int
+intel_dp_check_mst_link_status(struct intel_dp *intel_dp,
+			       u8 esi[DP_DPRX_ESI_LEN])
+{
+	int ret;
+
+	/* check link status - esi[10] = 0x200c */
+	if (!intel_dp->active_mst_links ||
+	    drm_dp_channel_eq_ok(&esi[10], intel_dp->lane_count))
+		return 0;
+
+	/* We already indicated to userspace the link status is bad */
+	if (intel_dp->mst_link_is_bad)
+		return 0;
+
+	if (intel_dp->mst_link_retrain_count++ >= 5) {
+
+		ret = intel_dp_get_link_train_fallback_values(
+		    intel_dp, intel_dp->link_rate,
+		    intel_dp->lane_count);
+		if (ret < 0)
+			return ret;
+
+		DRM_DEBUG_KMS("MST link train failed too many times, trying fallback values\n");
+
+		schedule_work(&intel_dp->modeset_retry_work);
+		intel_dp->mst_link_is_bad = true;
+		return -EAGAIN;
+	}
+
+	DRM_DEBUG_KMS("MST channel eq not ok, retraining\n");
+	intel_dp_retrain_link(intel_dp);
+	return 0;
+}
+
 static int
 intel_dp_check_mst_status(struct intel_dp *intel_dp)
 {
@@ -4213,14 +4302,7 @@ intel_dp_check_mst_status(struct intel_dp *intel_dp)
 		bret = intel_dp_get_sink_irq_esi(intel_dp, esi);
 go_again:
 		if (bret == true) {
-
-			/* check link status - esi[10] = 0x200c */
-			if (intel_dp->active_mst_links &&
-			    !drm_dp_channel_eq_ok(&esi[10], intel_dp->lane_count)) {
-				DRM_DEBUG_KMS("channel EQ not ok, retraining\n");
-				intel_dp_start_link_train(intel_dp);
-				intel_dp_stop_link_train(intel_dp);
-			}
+			intel_dp_check_mst_link_status(intel_dp, esi);
 
 			DRM_DEBUG_KMS("got esi %3ph\n", esi);
 			ret = drm_dp_mst_hpd_irq(&intel_dp->mst_mgr, esi, &handled);
@@ -4257,30 +4339,58 @@ go_again:
 	return -EINVAL;
 }
 
-static void
-intel_dp_retrain_link(struct intel_dp *intel_dp)
-{
-	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
-	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	struct intel_crtc *crtc = to_intel_crtc(encoder->base.crtc);
+/* FIXME this is the check_mst status we should be using I think? */
+/*static int*/
+/*intel_dp_check_mst_status(struct intel_dp *intel_dp)*/
+/*{*/
+	/*struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);*/
+	/*int ret = 0;*/
+	/*int retry;*/
+	/*bool handled;*/
+	/*bool bret;*/
+	/*u8 esi[DP_DPRX_ESI_LEN] = { 0 };*/
 
-	/* Suppress underruns caused by re-training */
-	intel_set_cpu_fifo_underrun_reporting(dev_priv, crtc->pipe, false);
-	if (crtc->config->has_pch_encoder)
-		intel_set_pch_fifo_underrun_reporting(dev_priv,
-						      intel_crtc_pch_transcoder(crtc), false);
+	/*if (!intel_dp->is_mst)*/
+		/*return -EINVAL;*/
 
-	intel_dp_start_link_train(intel_dp);
-	intel_dp_stop_link_train(intel_dp);
+	/*bret = intel_dp_get_sink_irq_esi(intel_dp, esi);*/
+	/*while (bret) {*/
+		/*ret = intel_dp_check_mst_link_status(intel_dp, esi);*/
+		/*if (ret == -EINVAL)*/
+			/*goto fail;*/
 
-	/* Keep underrun reporting disabled until things are stable */
-	intel_wait_for_vblank(dev_priv, crtc->pipe);
+		/*DRM_DEBUG_KMS("got esi %3ph\n", esi);*/
+		/*ret = drm_dp_mst_hpd_irq(&intel_dp->mst_mgr, esi, &handled);*/
 
-	intel_set_cpu_fifo_underrun_reporting(dev_priv, crtc->pipe, true);
-	if (crtc->config->has_pch_encoder)
-		intel_set_pch_fifo_underrun_reporting(dev_priv,
-						      intel_crtc_pch_transcoder(crtc), true);
-}
+		/*if (handled) {*/
+			/*for (retry = 0; retry < 3; retry++) {*/
+				/*int wret;*/
+				/*wret = drm_dp_dpcd_write(&intel_dp->aux,*/
+							 /*DP_SINK_COUNT_ESI+1,*/
+							 /*&esi[1], 3);*/
+				/*if (wret == 3)*/
+					/*break;*/
+			/*}*/
+
+			/*bret = intel_dp_get_sink_irq_esi(intel_dp, esi);*/
+			/*if (bret == true) {*/
+				/*DRM_DEBUG_KMS("got esi2 %3ph\n", esi);*/
+				/*continue;*/
+			/*}*/
+		/*} else*/
+			/*ret = 0;*/
+
+		/*return ret;*/
+	/*}*/
+
+/*fail:*/
+	/*DRM_DEBUG_KMS("failed to get ESI - device may have failed\n");*/
+	/*intel_dp->is_mst = false;*/
+	/*drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr, intel_dp->is_mst);*/
+	/*[> send a hotplug event <]*/
+	/*drm_kms_helper_hotplug_event(intel_dig_port->base.base.dev);*/
+	/*return -EINVAL;*/
+/*}*/
 
 static void
 intel_dp_check_link_status(struct intel_dp *intel_dp)
@@ -5975,25 +6085,46 @@ intel_dp_init_connector_port_info(struct intel_digital_port *intel_dig_port)
 
 static void intel_dp_modeset_retry_work_fn(struct work_struct *work)
 {
-	struct intel_connector *intel_connector;
+	struct intel_dp *intel_dp =
+		container_of(work, typeof(*intel_dp), modeset_retry_work);
+	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
+	struct intel_dp_mst_encoder *intel_dp_mst_enc;
+	struct drm_device *dev = intel_dig_port->base.base.dev;
 	struct drm_connector *connector;
 
-	intel_connector = container_of(work, typeof(*intel_connector),
-				       modeset_retry_work);
-	connector = &intel_connector->base;
-	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", connector->base.id,
-		      connector->name);
-
 	/* Grab the locks before changing connector property*/
-	mutex_lock(&connector->dev->mode_config.mutex);
-	/* Set connector link status to BAD and send a Uevent to notify
-	 * userspace to do a modeset.
+	mutex_lock(&dev->mode_config.mutex);
+
+	/* Set the connector link status of all (possibly downstream) ports to
+	 * BAD and send a Uevent to notify userspace to do a modeset.
 	 */
-	drm_mode_connector_set_link_status_property(connector,
-						    DRM_MODE_LINK_STATUS_BAD);
-	mutex_unlock(&connector->dev->mode_config.mutex);
+	if (intel_dp->is_mst) {
+		int i;
+
+		for (i = 0; i < ARRAY_SIZE(intel_dp->mst_encoders); i++) {
+			intel_dp_mst_enc = intel_dp->mst_encoders[i];
+			if (!intel_dp_mst_enc->connector)
+				continue;
+
+			connector = &intel_dp_mst_enc->connector->base;
+			DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n",
+				      connector->base.id, connector->name);
+			drm_mode_connector_set_link_status_property(
+			    connector, DRM_MODE_LINK_STATUS_BAD);
+		}
+	} else {
+		connector = &intel_dp->attached_connector->base;
+
+		DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n",
+			      connector->base.id, connector->name);
+		drm_mode_connector_set_link_status_property(
+		    connector, DRM_MODE_LINK_STATUS_BAD);
+	}
+
+	mutex_unlock(&dev->mode_config.mutex);
+
 	/* Send Hotplug uevent so userspace can reprobe */
-	drm_kms_helper_hotplug_event(connector->dev);
+	drm_kms_helper_hotplug_event(dev);
 }
 
 bool
@@ -6009,7 +6140,7 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 	int type;
 
 	/* Initialize the work for modeset in case of link train failure */
-	INIT_WORK(&intel_connector->modeset_retry_work,
+	INIT_WORK(&intel_dp->modeset_retry_work,
 		  intel_dp_modeset_retry_work_fn);
 
 	if (WARN(intel_dig_port->max_lanes < 1,

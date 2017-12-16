@@ -321,14 +321,14 @@ intel_dp_start_link_train(struct intel_dp *intel_dp)
 	if (!intel_dp_link_training_channel_equalization(intel_dp))
 		goto failure_handling;
 
-	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] Link Training Passed at Link Rate = %d, Lane count = %d",
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] Link training passed at link rate = %d, lane count = %d",
 		      intel_connector->base.base.id,
 		      intel_connector->base.name,
 		      intel_dp->link_rate, intel_dp->lane_count);
 	return;
 
  failure_handling:
-	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] Link Training failed at link rate = %d, lane count = %d",
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] Link training failed at link rate = %d, lane count = %d",
 		      intel_connector->base.base.id,
 		      intel_connector->base.name,
 		      intel_dp->link_rate, intel_dp->lane_count);
@@ -336,6 +336,6 @@ intel_dp_start_link_train(struct intel_dp *intel_dp)
 						     intel_dp->link_rate,
 						     intel_dp->lane_count))
 		/* Schedule a Hotplug Uevent to userspace to start modeset */
-		schedule_work(&intel_connector->modeset_retry_work);
+		schedule_work(&intel_dp->modeset_retry_work);
 	return;
 }
