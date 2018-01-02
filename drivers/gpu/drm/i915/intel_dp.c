@@ -4207,26 +4207,14 @@ intel_dp_retrain_link(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv =
 		to_i915(intel_dig_port->base.base.dev);
 	struct drm_device *dev = &dev_priv->drm;
-	struct intel_dp_mst_encoder *intel_dp_mst_enc;
-	struct intel_encoder *intel_encoder;
 	struct intel_crtc *crtc;
-	int i;
 	u32 crtc_mask = 0;
 
-	if (intel_dp->is_mst) {
-		for (i = 0; i < ARRAY_SIZE(intel_dp->mst_encoders); i++) {
-			intel_dp_mst_enc = intel_dp->mst_encoders[i];
-			intel_encoder = &intel_dp_mst_enc->base;
-			if (!intel_encoder->base.crtc ||
-			    !to_intel_crtc(intel_encoder->base.crtc)->active)
-				continue;
-
-			/* FIXME */
-			crtc_mask |= drm_crtc_mask(intel_encoder->base.crtc);
-		}
-	} else {
+	if (intel_dp->is_mst)
+		crtc_mask = intel_dp_mst_get_active_crtc_mask(intel_dp);
+		/*crtc_mask = 0;*/
+	else
 		crtc_mask = drm_crtc_mask(intel_dig_port->base.base.crtc);
-	}
 
 	/* Suppress underruns caused by re-training */
 	for_each_intel_crtc_mask(dev, crtc, crtc_mask) {
@@ -4258,6 +4246,10 @@ static int
 intel_dp_check_mst_link_status(struct intel_dp *intel_dp,
 			       u8 esi[DP_DPRX_ESI_LEN])
 {
+	struct drm_device *dev = dp_to_dig_port(intel_dp)->base.base.dev;
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_crtc *crtc;
+	u32 crtc_mask;
 	int ret;
 
 	/* check link status - esi[10] = 0x200c */
@@ -4278,6 +4270,19 @@ intel_dp_check_mst_link_status(struct intel_dp *intel_dp,
 			return ret;
 
 		DRM_DEBUG_KMS("MST link train failed too many times, trying fallback values\n");
+
+		/* Keep underrun detection disabled until the next modeset */
+		crtc_mask = intel_dp_mst_get_active_crtc_mask(intel_dp);
+		for_each_intel_crtc_mask(dev, crtc, crtc_mask) {
+			intel_set_cpu_fifo_underrun_reporting(
+			    dev_priv, crtc->pipe, false);
+
+			if (crtc->config->has_pch_encoder) {
+				intel_set_pch_fifo_underrun_reporting(
+				    dev_priv, intel_crtc_pch_transcoder(crtc),
+				    false);
+			}
+		}
 
 		schedule_work(&intel_dp->modeset_retry_work);
 		intel_dp->mst_link_is_bad = true;

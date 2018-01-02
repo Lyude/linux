@@ -634,3 +634,26 @@ intel_dp_mst_encoder_cleanup(struct intel_digital_port *intel_dig_port)
 	drm_dp_mst_topology_mgr_destroy(&intel_dp->mst_mgr);
 	/* encoders will get killed by normal cleanup */
 }
+
+u32
+intel_dp_mst_get_active_crtc_mask(struct intel_dp *intel_dp)
+{
+	struct intel_encoder *intel_encoder;
+	struct intel_dp_mst_encoder *intel_dp_mst_enc;
+	int i;
+	u32 crtc_mask = 0;
+
+	for (i = 0; i < ARRAY_SIZE(intel_dp->mst_encoders); i++) {
+		intel_dp_mst_enc = intel_dp->mst_encoders[i];
+		intel_encoder = &intel_dp_mst_enc->base;
+		if (!intel_encoder->base.crtc ||
+		    !to_intel_crtc(intel_encoder->base.crtc)->active)
+			continue;
+
+		/* FIXME */
+		crtc_mask |= drm_crtc_mask(intel_encoder->base.crtc);
+	}
+
+#include <lyude/kdebug.h>
+	return lyude_dump(crtc_mask, "x");
+}
