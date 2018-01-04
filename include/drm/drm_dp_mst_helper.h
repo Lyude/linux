@@ -407,9 +407,21 @@ struct drm_dp_payload {
 
 #define to_dp_mst_topology_state(x) container_of(x, struct drm_dp_mst_topology_state, base)
 
+/* Represents a connector with an MST port whose mstb had a mode programmed
+ * when the link rate of the topology was lowered. As long as a topology state
+ * has these, no mstbs may be activated
+ */
+struct drm_dp_mst_retrain_dep {
+	struct drm_connector *connector;
+	struct list_head entry;
+};
+
 struct drm_dp_mst_topology_state {
 	struct drm_private_state base;
 	int avail_slots;
+	/* A bitmask of the connectors that need to be retrained at lower link
+	 * rates for a modeset to become valid */
+	struct list_head bad_ports;
 	struct drm_dp_mst_topology_mgr *mgr;
 };
 
@@ -637,5 +649,10 @@ int drm_dp_atomic_release_vcpi_slots(struct drm_atomic_state *state,
 				     int slots);
 int drm_dp_send_power_updown_phy(struct drm_dp_mst_topology_mgr *mgr,
 				 struct drm_dp_mst_port *port, bool power_up);
+
+int drm_dp_mst_topology_mgr_lower_link_rate(struct drm_dp_mst_topology_mgr *mgr,
+					    int link_rate, int lane_count);
+int drm_dp_atomic_mst_check_retrain(struct drm_connector_state *new_conn_state,
+				    struct drm_dp_mst_topology_mgr *mgr);
 
 #endif
