@@ -2074,7 +2074,7 @@ static bool drm_dp_get_vc_payload_bw(int dp_link_bw,
 {
 	switch (dp_link_bw) {
 	default:
-		DRM_DEBUG_KMS("invalid link bandwidth in DPCD: %x (link count: %d)\n",
+		DRM_DEBUG_KMS("invalid link bandwidth: %x (link count: %d)\n",
 			      dp_link_bw, dp_link_count);
 		return false;
 
@@ -2090,6 +2090,75 @@ static bool drm_dp_get_vc_payload_bw(int dp_link_bw,
 	}
 	return true;
 }
+
+static void drm_dp_set_mstb_link_status(struct drm_dp_mst_branch *mstb,
+					enum drm_link_status status)
+{
+	struct drm_dp_mst_branch *rmstb;
+	struct drm_dp_mst_port *port;
+
+	list_for_each_entry(port, &mstb->ports, next) {
+		rmstb = drm_dp_get_validated_mstb_ref(mstb->mgr, port->mstb);
+		if (rmstb) {
+			drm_dp_set_mstb_link_status(rmstb, status);
+			drm_dp_put_mst_branch_device(rmstb);
+		}
+
+		if (port->connector) {
+			drm_mode_connector_set_link_status_property(
+			    port->connector, status);
+		}
+	}
+}
+
+/**
+ * drm_dp_mst_topology_mgr_lower_link_rate() - Override the DP link bw/count
+ * for all connectors in a given MST topology
+ * @mgr: manager to set state for
+ * @dp_link_bw: The new DP link bandwidth
+ * @dp_link_count: The new DP link count
+ *
+ * This is called by the driver when it detects that the current DP link for
+ * the given topology manager is unstable, and needs to be retrained at a
+ * lower link rate.
+ *
+ * This takes care of updating the link status on all downstream connectors
+ * along with recalculating the VC payloads. The driver should send a hotplug
+ * event after calling this function to notify userspace of the link status
+ * change.
+ *
+ * RETURNS:
+ *
+ * True for success, or negative error code on failure.
+ */
+int drm_dp_mst_topology_mgr_lower_link_rate(struct drm_dp_mst_topology_mgr *mgr,
+					    int dp_link_bw, int dp_link_count)
+{
+	struct drm_device *dev = mgr->dev;
+	struct drm_dp_mst_branch *mst_primary;
+	int new_pbn_div;
+	int ret = 0;
+
+	WARN_ON(!mutex_is_locked(&dev->mode_config.mutex));
+
+	if (!drm_dp_get_vc_payload_bw(drm_dp_link_rate_to_bw_code(dp_link_bw),
+				      dp_link_count, &new_pbn_div))
+		return -EINVAL;
+
+	mst_primary = drm_dp_get_validated_mstb_ref(mgr, mgr->mst_primary);
+	if (!mst_primary)
+		return 0;
+
+	DRM_DEBUG_KMS("MST link failed to retrain, lowering pbn_div to %d\n",
+		      new_pbn_div);
+	mgr->pbn_div = new_pbn_div;
+
+	drm_dp_set_mstb_link_status(mst_primary, DRM_MODE_LINK_STATUS_BAD);
+
+	drm_dp_put_mst_branch_device(mst_primary);
+	return ret;
+}
+EXPORT_SYMBOL(drm_dp_mst_topology_mgr_lower_link_rate);
 
 /**
  * drm_dp_mst_topology_mgr_set_mst() - Set the MST state for a topology manager
