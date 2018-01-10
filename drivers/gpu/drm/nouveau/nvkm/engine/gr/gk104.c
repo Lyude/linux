@@ -209,7 +209,7 @@ gk104_gr_init(struct gf100_gr *gr)
 	u32 data[TPC_MAX / 8] = {};
 	u8  tpcnr[GPC_MAX];
 	int gpc, tpc, rop;
-	int i;
+	int i, ret;
 
 	gr->func->init_gpc_mmu(gr);
 
@@ -303,7 +303,11 @@ gk104_gr_init(struct gf100_gr *gr)
 
 	gf100_gr_zbc_init(gr);
 
-	return gf100_gr_init_ctxctl(gr);
+	ret = gf100_gr_init_ctxctl(gr);
+
+	nvkm_therm_clkgate_set(device->therm, true);
+
+	return ret;
 }
 
 #include "fuc/hubgk104.fuc3.h"

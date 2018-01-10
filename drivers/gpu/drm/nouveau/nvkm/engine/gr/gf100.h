@@ -29,6 +29,7 @@
 #include <core/gpuobj.h>
 #include <subdev/ltc.h>
 #include <subdev/mmu.h>
+#include <subdev/therm.h>
 #include <engine/falcon.h>
 
 #define GPC_MAX 32
