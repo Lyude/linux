@@ -92,6 +92,9 @@ gf100_fb_init(struct nvkm_fb *base)
 
 	if (fb->r100c10_page)
 		nvkm_wr32(device, 0x100c10, fb->r100c10 >> 8);
+
+	if (base->func->clkgate_init)
+		base->func->clkgate_init(base);
 }
 
 void *

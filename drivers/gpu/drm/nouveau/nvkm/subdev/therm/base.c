@@ -330,7 +330,8 @@ nvkm_therm_clkgate_oneinit(struct nvkm_therm *therm)
 		return;
 
 	switch (therm->clkgate_level) {
-	case NVKM_THERM_CLKGATE_CG: clkgate_str = "CG"; break;
+	case NVKM_THERM_CLKGATE_CG:   clkgate_str = "CG"; break;
+	case NVKM_THERM_CLKGATE_BLCG: clkgate_str = "BLCG"; break;
 	default: BUG();
 	}
 
@@ -400,6 +401,16 @@ nvkm_therm_init(struct nvkm_subdev *subdev)
 	return 0;
 }
 
+void
+nvkm_therm_clkgate_init(struct nvkm_therm *therm,
+			const struct nvkm_therm_clkgate_pack *p)
+{
+	if (!therm->clkgate_level || !therm->func->clkgate_init)
+		return;
+
+	therm->func->clkgate_init(therm, p);
+}
+
 static void *
 nvkm_therm_dtor(struct nvkm_subdev *subdev)
 {
@@ -438,7 +449,7 @@ nvkm_therm_ctor(struct nvkm_therm *therm, struct nvkm_device *device,
 		clamp((int)nvkm_longopt(device->cfgopt,
 					"NvPmEnableGating",
 					NVKM_THERM_CLKGATE_NONE),
-		      NVKM_THERM_CLKGATE_NONE, NVKM_THERM_CLKGATE_CG);
+		      NVKM_THERM_CLKGATE_NONE, NVKM_THERM_CLKGATE_BLCG);
 }
 
 int
