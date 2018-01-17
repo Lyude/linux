@@ -2830,6 +2830,7 @@ void intel_ddi_init(struct drm_i915_private *dev_priv, enum port port)
 	drm_encoder_init(&dev_priv->drm, encoder, &intel_ddi_funcs,
 			 DRM_MODE_ENCODER_TMDS, "DDI %c", port_name(port));
 
+	intel_encoder->hotplug = intel_encoder_hotplug;
 	intel_encoder->compute_output_type = intel_ddi_compute_output_type;
 	intel_encoder->compute_config = intel_ddi_compute_config;
 	intel_encoder->enable = intel_enable_ddi;
