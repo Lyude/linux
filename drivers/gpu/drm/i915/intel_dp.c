@@ -4258,6 +4258,52 @@ intel_dp_retrain_link(struct intel_dp *intel_dp)
 	intel_dp_stop_link_train(intel_dp);
 	intel_dp_set_underrun_reporting(intel_dp, true);
 }
+
+/* Returns 0 if the link status is good or the link status is bad but is about
+ * to be retrained at a lower level.
+ * Returns < 0 if link status is bad and the link isn't about to be retrained
+ */
+static int
+intel_dp_check_mst_link_status(struct intel_dp *intel_dp,
+			       u8 esi[DP_DPRX_ESI_LEN])
+{
+	int ret;
+
+	/* If we've already detected that the MST link can't be retrained
+	 * without training at a lower rate, just ignore the link status until
+	 * a modeset disables all of the links on this port
+	 */
+	if (intel_dp->mst_link_is_bad)
+		return 0;
+
+	/* check link status - esi[10] = 0x200c */
+	if (!intel_dp->active_mst_links ||
+	    drm_dp_channel_eq_ok(&esi[10], intel_dp->lane_count))
+		return 0;
+
+	if (intel_dp->mst_link_retrain_count++ >= 5) {
+		ret = intel_dp_get_link_train_fallback_values(
+		    intel_dp, intel_dp->link_rate,
+		    intel_dp->lane_count);
+		if (ret < 0)
+			return ret;
+
+		DRM_DEBUG_KMS("MST link train failed too many times, trying fallback values\n");
+		intel_dp->mst_link_is_bad = true;
+	}
+
+	if (intel_dp->mst_link_is_bad) {
+		/* Keep underrun detection disabled until the next modeset */
+		intel_dp_set_underrun_reporting(intel_dp, false);
+		schedule_work(&intel_dp->modeset_retry_work);
+	} else {
+		DRM_DEBUG_KMS("MST channel eq not ok, retraining\n");
+		intel_dp_retrain_link(intel_dp);
+	}
+
+	return 0;
+}
+
 static int
 intel_dp_check_mst_status(struct intel_dp *intel_dp)
 {
@@ -4271,13 +4317,9 @@ intel_dp_check_mst_status(struct intel_dp *intel_dp)
 		bret = intel_dp_get_sink_irq_esi(intel_dp, esi);
 go_again:
 		if (bret == true) {
-
-			/* check link status - esi[10] = 0x200c */
-			if (intel_dp->active_mst_links &&
-			    !drm_dp_channel_eq_ok(&esi[10], intel_dp->lane_count)) {
-				DRM_DEBUG_KMS("channel EQ not ok, retraining\n");
-				intel_dp_retrain_link(intel_dp);
-			}
+			ret = intel_dp_check_mst_link_status(intel_dp, esi);
+			if (ret < 0)
+				return ret;
 
 			DRM_DEBUG_KMS("got esi %3ph\n", esi);
 			ret = drm_dp_mst_hpd_irq(&intel_dp->mst_mgr, esi, &handled);
@@ -6009,21 +6051,56 @@ static void intel_dp_modeset_retry_work_fn(struct work_struct *work)
 {
 	struct intel_dp *intel_dp = container_of(work, typeof(*intel_dp),
 						 modeset_retry_work);
-	struct drm_connector *connector = &intel_dp->attached_connector->base;
+	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
+	struct drm_device *dev = intel_dig_port->base.base.dev;
+	struct drm_connector *connector;
+	struct drm_modeset_acquire_ctx ctx;
+	struct drm_crtc *crtc;
+	int crtc_mask;
+	int ret;
 
-	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", connector->base.id,
-		      connector->name);
+	mutex_lock(&dev->mode_config.mutex);
+	crtc_mask = intel_dp_get_active_crtc_mask(intel_dp);
 
-	/* Grab the locks before changing connector property*/
-	mutex_lock(&connector->dev->mode_config.mutex);
-	/* Set connector link status to BAD and send a Uevent to notify
-	 * userspace to do a modeset.
+	/* We can't change the link rate while there's other potential
+	 * modesetting going on
 	 */
-	drm_mode_connector_set_link_status_property(connector,
-						    DRM_MODE_LINK_STATUS_BAD);
-	mutex_unlock(&connector->dev->mode_config.mutex);
+	drm_modeset_acquire_init(&ctx, 0);
+retry_lock:
+	for_each_crtc(dev, crtc) {
+		if (!(crtc_mask & drm_crtc_mask(crtc)))
+			continue;
+
+		ret = drm_modeset_lock(&crtc->mutex, &ctx);
+		if (ret == -EDEADLK) {
+			drm_modeset_backoff(&ctx);
+			goto retry_lock;
+		}
+	}
+
+	/* Set the connector link status of all (possibly downstream) ports to
+	 * BAD and send a Uevent to notify userspace to do a modeset.
+	 */
+	if (intel_dp->is_mst) {
+		drm_dp_mst_topology_mgr_lower_link_rate(
+		    &intel_dp->mst_mgr,
+		    intel_dp_max_link_rate(intel_dp),
+		    intel_dp_max_lane_count(intel_dp));
+	} else {
+		connector = &intel_dp->attached_connector->base;
+
+		DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n",
+			      connector->base.id, connector->name);
+		drm_mode_connector_set_link_status_property(
+		    connector, DRM_MODE_LINK_STATUS_BAD);
+	}
+
+	drm_modeset_drop_locks(&ctx);
+	mutex_unlock(&dev->mode_config.mutex);
+	drm_modeset_acquire_fini(&ctx);
+
 	/* Send Hotplug uevent so userspace can reprobe */
-	drm_kms_helper_hotplug_event(connector->dev);
+	drm_kms_helper_hotplug_event(dev);
 }
 
 bool

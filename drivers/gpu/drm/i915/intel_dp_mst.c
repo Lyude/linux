@@ -173,6 +173,8 @@ static void intel_mst_post_disable_dp(struct intel_encoder *encoder,
 
 	intel_mst->connector = NULL;
 	if (intel_dp->active_mst_links == 0) {
+		intel_dp->mst_link_is_bad = false;
+		intel_dp->mst_link_retrain_count = 0;
 		intel_dig_port->base.post_disable(&intel_dig_port->base,
 						  NULL, NULL);
 	}
