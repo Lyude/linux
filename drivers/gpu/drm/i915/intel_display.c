@@ -15407,20 +15407,28 @@ void intel_connector_unregister(struct drm_connector *connector)
 
 static void intel_hpd_poll_fini(struct drm_device *dev)
 {
-	struct intel_connector *connector;
 	struct drm_connector_list_iter conn_iter;
+	struct intel_connector *connector;
+	struct intel_encoder *encoder;
+	struct intel_dp *intel_dp;
 
 	/* Kill all the work that may have been queued by hpd. */
 	drm_connector_list_iter_begin(dev, &conn_iter);
 	for_each_intel_connector_iter(connector, &conn_iter) {
-		if (connector->modeset_retry_work.func)
-			cancel_work_sync(&connector->modeset_retry_work);
 		if (connector->hdcp_shim) {
 			cancel_delayed_work_sync(&connector->hdcp_check_work);
 			cancel_work_sync(&connector->hdcp_prop_work);
 		}
 	}
 	drm_connector_list_iter_end(&conn_iter);
+
+	for_each_intel_encoder(dev, encoder) {
+		if (encoder->type == INTEL_OUTPUT_DP ||
+		    encoder->type == INTEL_OUTPUT_EDP) {
+			intel_dp = enc_to_intel_dp(&encoder->base);
+			cancel_work_sync(&intel_dp->modeset_retry_work);
+		}
+	}
 }
 
 void intel_modeset_cleanup(struct drm_device *dev)

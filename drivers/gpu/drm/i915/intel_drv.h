@@ -406,9 +406,6 @@ struct intel_connector {
 
 	struct intel_dp *mst_port;
 
-	/* Work struct to schedule a uevent on link train failure */
-	struct work_struct modeset_retry_work;
-
 	const struct intel_hdcp_shim *hdcp_shim;
 	struct mutex hdcp_mutex;
 	uint64_t hdcp_value; /* protected by hdcp_mutex */
@@ -1139,6 +1136,9 @@ struct intel_dp {
 
 	/* Displayport compliance testing */
 	struct intel_dp_compliance compliance;
+
+	/* Work struct to schedule a uevent on link train failure */
+	struct work_struct modeset_retry_work;
 };
 
 struct intel_lspcon {
