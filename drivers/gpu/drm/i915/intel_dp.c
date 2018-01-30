@@ -4295,7 +4295,26 @@ intel_dp_check_mst_link_status(struct intel_dp *intel_dp,
 	    drm_dp_channel_eq_ok(&esi[10], intel_dp->lane_count))
 		return 0;
 
-	if (intel_dp->mst_link_retrain_count++ >= 5) {
+	/* If the sink changed its reported link rates, something that can
+	 * happen if the link rate becomes by an outside factor (such as a
+	 * transparent hub inbetween the sink and source with a lower link
+	 * rate than the two) we skip retrying entirely and fallback to the
+	 * new rates
+	 *
+	 * As a note here, we're supposed to see the RX_CAP_CHANGED bit get
+	 * set by the sink in order to indicate that this has happened
+	 * according to the DP MST protocol, however some sinks seem to not
+	 * set this and just go straight to changing their DPCD. So, just
+	 * check for this change ourselves every time.
+	 */
+	if (intel_dp_sink_changed_rates(intel_dp)) {
+		DRM_DEBUG_KMS("RX caps on MST hub changed, forcing link status to bad\n");
+		intel_dp->mst_link_is_bad = true;
+		if (!intel_dp_get_dpcd(intel_dp)) {
+			DRM_ERROR("Failed to read dpcd\n");
+			return -EINVAL;
+		}
+	} else if (intel_dp->mst_link_retrain_count++ >= 5) {
 		ret = intel_dp_get_link_train_fallback_values(
 		    intel_dp, intel_dp->link_rate,
 		    intel_dp->lane_count);
