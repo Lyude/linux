@@ -153,6 +153,20 @@ static void intel_dp_set_sink_rates(struct intel_dp *intel_dp)
 	intel_dp->num_sink_rates = i;
 }
 
+/* Check the dpcd to see if the sink has reported that it's link rate has
+ * changed
+ */
+bool intel_dp_sink_changed_rates(struct intel_dp *intel_dp)
+{
+	u8 rx_caps[2];
+
+	if (drm_dp_dpcd_read(&intel_dp->aux, DP_MAX_LINK_RATE, rx_caps, 2) < 0)
+		return true;
+
+	return  rx_caps[0] != intel_dp->dpcd[DP_MAX_LINK_RATE] ||
+		rx_caps[1] != intel_dp->dpcd[DP_MAX_LANE_COUNT];
+}
+
 /* Theoretical max between source and sink */
 static int intel_dp_max_common_rate(struct intel_dp *intel_dp)
 {
@@ -4362,6 +4376,7 @@ intel_dp_check_link_status(struct intel_dp *intel_dp)
 	struct intel_encoder *intel_encoder = &dp_to_dig_port(intel_dp)->base;
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 	u8 link_status[DP_LINK_STATUS_SIZE];
+	int ret;
 
 	WARN_ON(!drm_modeset_is_locked(&dev->mode_config.connection_mutex));
 
@@ -4375,6 +4390,22 @@ intel_dp_check_link_status(struct intel_dp *intel_dp)
 
 	if (!to_intel_crtc(intel_encoder->base.crtc)->active)
 		return;
+
+	/*
+	 * The sink changed it's link rates, so skip trying to retrain
+	 * entirely and just start fallback training
+	 */
+	if (intel_dp_sink_changed_rates(intel_dp)) {
+		ret = intel_dp_get_dpcd(intel_dp);
+		if (!ret) {
+			DRM_ERROR("Failed to read DPCD\n");
+			return;
+		}
+
+		DRM_DEBUG_KMS("Sink changed RX capabilities, fallback training required\n");
+		schedule_work(&intel_dp->modeset_retry_work);
+		return;
+	}
 
 	/*
 	 * Validate the cached values of intel_dp->link_rate and
