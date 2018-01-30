@@ -4201,6 +4201,64 @@ update_status:
 }
 
 static int
+intel_dp_get_active_crtc_mask(struct intel_dp *intel_dp)
+{
+	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+
+	if (intel_dp->is_mst) {
+		struct intel_dp_mst_encoder *intel_dp_mst_enc;
+		struct intel_encoder *intel_encoder;
+		int i;
+		u32 crtc_mask = 0;
+
+		for (i = 0; i < ARRAY_SIZE(intel_dp->mst_encoders); i++) {
+			intel_dp_mst_enc = intel_dp->mst_encoders[i];
+			intel_encoder = &intel_dp_mst_enc->base;
+			if (!intel_encoder->base.crtc ||
+			    !to_intel_crtc(intel_encoder->base.crtc)->active)
+				continue;
+
+			crtc_mask |= drm_crtc_mask(intel_encoder->base.crtc);
+		}
+
+		return crtc_mask;
+	} else {
+		return drm_crtc_mask(dig_port->base.base.crtc);
+	}
+}
+
+static void
+intel_dp_set_underrun_reporting(struct intel_dp *intel_dp, bool enable)
+{
+	struct drm_device *dev = dp_to_dig_port(intel_dp)->base.base.dev;
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_crtc *crtc;
+	int crtc_mask = intel_dp_get_active_crtc_mask(intel_dp);
+
+	for_each_intel_crtc_mask(dev, crtc, crtc_mask) {
+		/* Keep underrun reporting disabled until things are stable */
+		if (enable)
+			intel_wait_for_vblank(dev_priv, crtc->pipe);
+
+		intel_set_cpu_fifo_underrun_reporting(dev_priv, crtc->pipe,
+						      enable);
+		if (crtc->config->has_pch_encoder) {
+			intel_set_pch_fifo_underrun_reporting(
+			    dev_priv, intel_crtc_pch_transcoder(crtc), enable);
+		}
+	}
+}
+
+static void
+intel_dp_retrain_link(struct intel_dp *intel_dp)
+{
+	/* Suppress underruns caused by re-training */
+	intel_dp_set_underrun_reporting(intel_dp, false);
+	intel_dp_start_link_train(intel_dp);
+	intel_dp_stop_link_train(intel_dp);
+	intel_dp_set_underrun_reporting(intel_dp, true);
+}
+static int
 intel_dp_check_mst_status(struct intel_dp *intel_dp)
 {
 	bool bret;
@@ -4218,8 +4276,7 @@ go_again:
 			if (intel_dp->active_mst_links &&
 			    !drm_dp_channel_eq_ok(&esi[10], intel_dp->lane_count)) {
 				DRM_DEBUG_KMS("channel EQ not ok, retraining\n");
-				intel_dp_start_link_train(intel_dp);
-				intel_dp_stop_link_train(intel_dp);
+				intel_dp_retrain_link(intel_dp);
 			}
 
 			DRM_DEBUG_KMS("got esi %3ph\n", esi);
@@ -4255,31 +4312,6 @@ go_again:
 		}
 	}
 	return -EINVAL;
-}
-
-static void
-intel_dp_retrain_link(struct intel_dp *intel_dp)
-{
-	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
-	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	struct intel_crtc *crtc = to_intel_crtc(encoder->base.crtc);
-
-	/* Suppress underruns caused by re-training */
-	intel_set_cpu_fifo_underrun_reporting(dev_priv, crtc->pipe, false);
-	if (crtc->config->has_pch_encoder)
-		intel_set_pch_fifo_underrun_reporting(dev_priv,
-						      intel_crtc_pch_transcoder(crtc), false);
-
-	intel_dp_start_link_train(intel_dp);
-	intel_dp_stop_link_train(intel_dp);
-
-	/* Keep underrun reporting disabled until things are stable */
-	intel_wait_for_vblank(dev_priv, crtc->pipe);
-
-	intel_set_cpu_fifo_underrun_reporting(dev_priv, crtc->pipe, true);
-	if (crtc->config->has_pch_encoder)
-		intel_set_pch_fifo_underrun_reporting(dev_priv,
-						      intel_crtc_pch_transcoder(crtc), true);
 }
 
 static void
