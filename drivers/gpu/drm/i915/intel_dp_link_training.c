@@ -340,7 +340,7 @@ intel_dp_start_link_train(struct intel_dp *intel_dp)
 							     intel_dp->link_rate,
 							     intel_dp->lane_count))
 			/* Schedule a Hotplug Uevent to userspace to start modeset */
-			schedule_work(&intel_connector->modeset_retry_work);
+			schedule_work(&intel_dp->modeset_retry_work);
 	} else {
 		DRM_ERROR("[CONNECTOR:%d:%s] Link Training failed at link rate = %d, lane count = %d",
 			  intel_connector->base.base.id,
