@@ -110,27 +110,50 @@ static int intel_dp_mst_atomic_check(struct drm_connector *connector,
 	struct drm_connector_state *old_conn_state;
 	struct drm_crtc *old_crtc;
 	struct drm_crtc_state *crtc_state;
+	struct drm_dp_mst_topology_mgr *mgr;
+	struct drm_encoder *encoder;
 	int slots, ret = 0;
+	bool could_retrain = false;
+
+	if (new_conn_state->crtc) {
+		crtc_state = drm_atomic_get_new_crtc_state(
+		    state, new_conn_state->crtc);
+		if (crtc_state && drm_atomic_crtc_needs_modeset(crtc_state))
+			could_retrain = true;
+	}
 
 	old_conn_state = drm_atomic_get_old_connector_state(state, connector);
 	old_crtc = old_conn_state->crtc;
 	if (!old_crtc)
-		return ret;
+		goto out;
 
 	crtc_state = drm_atomic_get_new_crtc_state(state, old_crtc);
-	slots = to_intel_crtc_state(crtc_state)->dp_m_n.tu;
-	if (drm_atomic_crtc_needs_modeset(crtc_state) && slots > 0) {
-		struct drm_dp_mst_topology_mgr *mgr;
-		struct drm_encoder *old_encoder;
+	if (!drm_atomic_crtc_needs_modeset(crtc_state))
+		goto out;
+	could_retrain = true;
 
-		old_encoder = old_conn_state->best_encoder;
-		mgr = &enc_to_mst(old_encoder)->primary->dp.mst_mgr;
+	slots = to_intel_crtc_state(crtc_state)->dp_m_n.tu;
+	if (slots > 0) {
+		encoder = old_conn_state->best_encoder;
+		mgr = &enc_to_mst(encoder)->primary->dp.mst_mgr;
 
 		ret = drm_dp_atomic_release_vcpi_slots(state, mgr, slots);
 		if (ret)
 			DRM_DEBUG_KMS("failed releasing %d vcpi slots:%d\n", slots, ret);
 		else
 			to_intel_crtc_state(crtc_state)->dp_m_n.tu = 0;
+	}
+
+out:
+	if (could_retrain &&
+	    old_conn_state->link_status == DRM_MODE_LINK_STATUS_BAD) {
+		if (new_conn_state->best_encoder)
+			encoder = new_conn_state->best_encoder;
+		else
+			encoder = old_conn_state->best_encoder;
+
+		mgr = &enc_to_mst(encoder)->primary->dp.mst_mgr;
+		ret = drm_atomic_dp_mst_retrain_topology(state, mgr);
 	}
 	return ret;
 }
@@ -186,9 +209,12 @@ static void intel_mst_post_disable_dp(struct intel_encoder *encoder,
 	intel_dp->active_mst_links--;
 
 	intel_mst->connector = NULL;
-	if (intel_dp->active_mst_links == 0)
+	if (intel_dp->active_mst_links == 0) {
+		intel_dp->mst_link_is_bad = false;
+
 		intel_dig_port->base.post_disable(&intel_dig_port->base,
 						  old_crtc_state, NULL);
+	}
 
 	DRM_DEBUG_KMS("active links %d\n", intel_dp->active_mst_links);
 }

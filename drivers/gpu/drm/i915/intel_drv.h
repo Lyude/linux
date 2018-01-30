@@ -1034,6 +1034,13 @@ struct intel_dp {
 	/* mst connector list */
 	struct intel_dp_mst_encoder *mst_encoders[I915_MAX_PIPES];
 	struct drm_dp_mst_topology_mgr mst_mgr;
+	/* We can't handle retraining from the dig workqueue, so... */
+	struct work_struct mst_retrain_work;
+	struct completion mst_retrain_completion;
+	/* Set when retraining the link at the current parameters is
+	 * impossible for an MST connection
+	 */
+	bool mst_link_is_bad;
 
 	uint32_t (*get_aux_clock_divider)(struct intel_dp *dp, int index);
 	/*
@@ -1590,6 +1597,7 @@ void intel_dp_compute_rate(struct intel_dp *intel_dp, int port_clock,
 bool intel_dp_source_supports_hbr2(struct intel_dp *intel_dp);
 bool
 intel_dp_get_link_status(struct intel_dp *intel_dp, uint8_t link_status[DP_LINK_STATUS_SIZE]);
+int intel_dp_get_crtc_mask(struct intel_dp *intel_dp);
 
 static inline unsigned int intel_dp_unused_lane_mask(int lane_count)
 {
