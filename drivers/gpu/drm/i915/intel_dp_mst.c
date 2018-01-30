@@ -152,11 +152,34 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 }
 
 static int intel_dp_mst_atomic_check(struct drm_connector *connector,
-		struct drm_connector_state *new_conn_state)
+				     struct drm_connector_state *new_conn_state)
 {
 	struct drm_atomic_state *state = new_conn_state->state;
 	struct drm_connector_state *old_conn_state;
+	struct intel_dp *intel_dp = to_intel_connector(connector)->mst_port;
+	struct drm_dp_mst_topology_state *mst_state;
+	struct intel_dp_mst_topology_state *intel_mst_state;
 	int ret = 0;
+
+	/* We can't retrain anything if the hub isn't there anymore */
+	if (intel_dp) {
+		ret = drm_dp_atomic_mst_check_retrain(
+		    new_conn_state, &intel_dp->mst_mgr);
+
+		/* This commit invokes a retrain, reset the link rate */
+		if (ret == 1) {
+			mst_state = drm_atomic_dp_mst_get_topology_state(
+			    state, &intel_dp->mst_mgr);
+			intel_mst_state = to_intel_dp_mst_topology_state(
+			    mst_state);
+
+			intel_mst_state->link_rate = 0;
+			intel_mst_state->lane_count = 0;
+			ret = 0;
+		} else if (ret < 0) {
+			return ret;
+		}
+	}
 
 	old_conn_state = drm_atomic_get_old_connector_state(state, connector);
 
@@ -223,9 +246,12 @@ static void intel_mst_post_disable_dp(struct intel_encoder *encoder,
 	intel_dp->active_mst_links--;
 
 	intel_mst->connector = NULL;
-	if (intel_dp->active_mst_links == 0)
+	if (intel_dp->active_mst_links == 0) {
+		intel_dp->link_is_bad = false;
+
 		intel_dig_port->base.post_disable(&intel_dig_port->base,
 						  old_crtc_state, NULL);
+	}
 
 	DRM_DEBUG_KMS("active links %d\n", intel_dp->active_mst_links);
 }

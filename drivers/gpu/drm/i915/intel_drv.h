@@ -1125,6 +1125,11 @@ struct intel_dp {
 	/* mst connector list */
 	struct intel_dp_mst_encoder *mst_encoders[I915_MAX_PIPES];
 	struct drm_dp_mst_topology_mgr mst_mgr;
+	struct completion mst_retrain_completion;
+	/* Set when retraining the link at the current parameters is
+	 * impossible
+	 */
+	bool link_is_bad;
 
 	uint32_t (*get_aux_clock_divider)(struct intel_dp *dp, int index);
 	/*
@@ -1640,6 +1645,7 @@ void intel_dp_start_link_train(struct intel_dp *intel_dp);
 void intel_dp_stop_link_train(struct intel_dp *intel_dp);
 int intel_dp_retrain_link(struct intel_encoder *encoder,
 			  struct drm_modeset_acquire_ctx *ctx);
+int intel_dp_handle_train_failure(struct intel_dp *intel_dp);
 void intel_dp_sink_dpms(struct intel_dp *intel_dp, int mode);
 void intel_dp_encoder_reset(struct drm_encoder *encoder);
 void intel_dp_encoder_suspend(struct intel_encoder *intel_encoder);
@@ -1692,6 +1698,7 @@ void intel_dp_compute_rate(struct intel_dp *intel_dp, int port_clock,
 bool intel_dp_source_supports_hbr2(struct intel_dp *intel_dp);
 bool
 intel_dp_get_link_status(struct intel_dp *intel_dp, uint8_t link_status[DP_LINK_STATUS_SIZE]);
+int intel_dp_get_crtc_mask(struct intel_dp *intel_dp);
 
 static inline unsigned int intel_dp_unused_lane_mask(int lane_count)
 {

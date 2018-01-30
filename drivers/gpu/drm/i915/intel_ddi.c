@@ -3059,9 +3059,17 @@ static bool intel_ddi_hotplug(struct intel_encoder *encoder,
 		break;
 	}
 
+	if (ret == -EINVAL)
+		ret = intel_dp_handle_train_failure(
+		    enc_to_intel_dp(&encoder->base));
+
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
-	WARN(ret, "Acquiring modeset locks failed with %i\n", ret);
+
+	if (ret == -EIO)
+		changed = true;
+	else
+		WARN(ret, "Acquiring modeset locks failed with %i\n", ret);
 
 	return changed;
 }
