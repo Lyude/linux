@@ -15204,12 +15204,30 @@ static void intel_hpd_poll_fini(struct drm_device *dev)
 {
 	struct intel_connector *connector;
 	struct drm_connector_list_iter conn_iter;
+	struct work_struct *work;
 
 	/* Kill all the work that may have been queued by hpd. */
 	drm_connector_list_iter_begin(dev, &conn_iter);
 	for_each_intel_connector_iter(connector, &conn_iter) {
-		if (connector->modeset_retry_work.func)
-			cancel_work_sync(&connector->modeset_retry_work);
+		if (connector->base.connector_type !=
+		    DRM_MODE_CONNECTOR_DisplayPort)
+			continue;
+
+		if (connector->mst_port) {
+			work = &connector->mst_port->modeset_retry_work;
+		} else {
+			struct intel_encoder *intel_encoder =
+				connector->encoder;
+			struct intel_dp *intel_dp;
+
+			if (!intel_encoder)
+				continue;
+
+			intel_dp = enc_to_intel_dp(&intel_encoder->base);
+			work = &intel_dp->modeset_retry_work;
+		}
+
+		cancel_work_sync(work);
 	}
 	drm_connector_list_iter_end(&conn_iter);
 }
