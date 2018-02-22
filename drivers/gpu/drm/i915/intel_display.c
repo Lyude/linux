@@ -11941,9 +11941,13 @@ static int intel_atomic_check(struct drm_device *dev,
 	struct intel_atomic_state *intel_state = to_intel_atomic_state(state);
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *old_crtc_state, *crtc_state;
+	struct drm_connector *connector;
+	struct drm_connector_state *old_conn_state, *conn_state;
 	int ret, i;
-	bool any_ms = false;
+	bool any_ms = false, do_recheck;
 
+recheck:
+	do_recheck = false;
 	ret = drm_atomic_helper_check_modeset(dev, state);
 	if (ret)
 		return ret;
@@ -12005,6 +12009,31 @@ static int intel_atomic_check(struct drm_device *dev,
 			return ret;
 	} else {
 		intel_state->cdclk.logical = dev_priv->cdclk.logical;
+	}
+
+	/* Go through all of the encoders in the state and see if any of them
+	 * need to add additional CRTCs into the state. If so, recheck */
+	for_each_oldnew_connector_in_state(state, connector, old_conn_state,
+					   conn_state, i) {
+		struct drm_encoder *encoder = conn_state->best_encoder;
+		struct intel_encoder *intel_encoder;
+
+		if (!encoder)
+			continue;
+
+		intel_encoder = to_intel_encoder(encoder);
+		if (!intel_encoder->compute_deps)
+			continue;
+
+		ret = intel_encoder->compute_deps(state, intel_encoder);
+		if (ret > 0)
+			do_recheck = true;
+		else if (ret < 0)
+			return ret;
+	}
+	if (do_recheck) {
+		DRM_DEBUG_ATOMIC("Atomic recheck required\n");
+		goto recheck;
 	}
 
 	ret = drm_atomic_helper_check_planes(dev, state);

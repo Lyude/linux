@@ -213,6 +213,8 @@ struct intel_encoder {
 	unsigned int cloneable;
 	bool (*hotplug)(struct intel_encoder *encoder,
 			struct intel_connector *connector);
+	int (*compute_deps)(struct drm_atomic_state *,
+			    struct intel_encoder *);
 	enum intel_output_type (*compute_output_type)(struct intel_encoder *,
 						      struct intel_crtc_state *,
 						      struct drm_connector_state *);

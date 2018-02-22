@@ -97,6 +97,49 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	return true;
 }
 
+static int intel_dp_mst_compute_deps(struct drm_atomic_state *state,
+				     struct intel_encoder *encoder)
+{
+	struct intel_atomic_state *intel_state = to_intel_atomic_state(state);
+	struct drm_device *dev = encoder->base.dev;
+	struct intel_dp_mst_encoder *mst_enc = enc_to_mst(&encoder->base);
+	struct intel_dp *intel_dp = &mst_enc->primary->dp;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *new_state;
+	int crtc_mask;
+	bool changed = false;
+
+	if (!intel_state->modeset || !intel_dp->mst_link_is_bad)
+		return false; /* nothing to do */
+
+	/* If we're doing a modeset after we've recalculated the PBN (due to
+	 * link retraining failing and not being recoverable), every other
+	 * CRTC that is driving a downstream sink on this MST hub must be
+	 * added to the state to allow for us to change the PBN properly.
+	 */
+	crtc_mask = intel_dp_get_crtc_mask(intel_dp);
+	drm_for_each_crtc(crtc, dev) {
+		if (!(drm_crtc_mask(crtc) & crtc_mask))
+			continue;
+
+		/* CRTC already added */
+		if (drm_atomic_get_existing_crtc_state(state, crtc))
+			continue;
+
+		if (!changed) {
+			DRM_DEBUG_ATOMIC("MST PBN changed, adding dependent CRTCs\n");
+			changed = true;
+		}
+
+		new_state = drm_atomic_get_crtc_state(state, crtc);
+		if (IS_ERR(new_state))
+			return PTR_ERR(new_state);
+		new_state->mode_changed = true;
+	}
+
+	return changed;
+}
+
 static int
 intel_dp_mst_atomic_release_vcpi_slots(struct drm_crtc_state *new_crtc_state,
 				       struct drm_connector_state *conn_state)
@@ -591,6 +634,7 @@ intel_dp_create_fake_mst_encoder(struct intel_digital_port *intel_dig_port, enum
 	intel_encoder->cloneable = 0;
 
 	intel_encoder->compute_config = intel_dp_mst_compute_config;
+	intel_encoder->compute_deps = intel_dp_mst_compute_deps;
 	intel_encoder->disable = intel_mst_disable_dp;
 	intel_encoder->post_disable = intel_mst_post_disable_dp;
 	intel_encoder->pre_pll_enable = intel_mst_pre_pll_enable_dp;
