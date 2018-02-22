@@ -97,35 +97,69 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	return true;
 }
 
+static int
+intel_dp_mst_atomic_release_vcpi_slots(struct drm_crtc_state *new_crtc_state,
+				       struct drm_connector_state *conn_state)
+{
+	struct drm_atomic_state *state = new_crtc_state->state;
+	struct intel_crtc_state *intel_crtc_state =
+		to_intel_crtc_state(new_crtc_state);
+	struct drm_encoder *encoder;
+	struct drm_dp_mst_topology_mgr *mgr;
+	int slots, ret;
+
+	slots = intel_crtc_state->dp_m_n.tu;
+	if (slots <= 0)
+		return 0;
+
+	encoder = conn_state->best_encoder;
+	mgr = &enc_to_mst(encoder)->primary->dp.mst_mgr;
+
+	ret = drm_dp_atomic_release_vcpi_slots(state, mgr, slots);
+	if (ret)
+		DRM_DEBUG_KMS("failed releasing %d vcpi slots:%d\n",
+			      slots, ret);
+	else
+		intel_crtc_state->dp_m_n.tu = 0;
+
+	return ret;
+}
+
 static int intel_dp_mst_atomic_check(struct drm_connector *connector,
-		struct drm_connector_state *new_conn_state)
+				     struct drm_connector_state *new_conn_state)
 {
 	struct drm_atomic_state *state = new_conn_state->state;
 	struct drm_connector_state *old_conn_state;
-	struct drm_crtc *old_crtc;
+	struct drm_crtc *crtc;
 	struct drm_crtc_state *crtc_state;
-	int slots, ret = 0;
+	int ret = 0;
 
-	old_conn_state = drm_atomic_get_old_connector_state(state, connector);
-	old_crtc = old_conn_state->crtc;
-	if (!old_crtc)
-		return ret;
-
-	crtc_state = drm_atomic_get_new_crtc_state(state, old_crtc);
-	slots = to_intel_crtc_state(crtc_state)->dp_m_n.tu;
-	if (drm_atomic_crtc_needs_modeset(crtc_state) && slots > 0) {
-		struct drm_dp_mst_topology_mgr *mgr;
-		struct drm_encoder *old_encoder;
-
-		old_encoder = old_conn_state->best_encoder;
-		mgr = &enc_to_mst(old_encoder)->primary->dp.mst_mgr;
-
-		ret = drm_dp_atomic_release_vcpi_slots(state, mgr, slots);
-		if (ret)
-			DRM_DEBUG_KMS("failed releasing %d vcpi slots:%d\n", slots, ret);
-		else
-			to_intel_crtc_state(crtc_state)->dp_m_n.tu = 0;
+	/* In case the atomic check is done more then once, make sure we free
+	 * any vcpi slots we have allocated to the current CRTC in the new
+	 * state
+	 */
+	crtc = new_conn_state->crtc;
+	if (crtc) {
+		crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+		if (drm_atomic_crtc_needs_modeset(crtc_state)) {
+			ret = intel_dp_mst_atomic_release_vcpi_slots(
+			    crtc_state, new_conn_state);
+			if (ret)
+				return ret;
+		}
 	}
+
+	/* If this connector had vcpi allocated in the old state, free it */
+	old_conn_state = drm_atomic_get_old_connector_state(state, connector);
+	crtc = old_conn_state->crtc;
+	if (crtc) {
+		crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+		if (drm_atomic_crtc_needs_modeset(crtc_state)) {
+			ret = intel_dp_mst_atomic_release_vcpi_slots(
+			    crtc_state, old_conn_state);
+		}
+	}
+
 	return ret;
 }
 
