@@ -3850,18 +3850,25 @@ intel_dp_can_mst(struct intel_dp *intel_dp)
 static void
 intel_dp_configure_mst(struct intel_dp *intel_dp)
 {
+	bool was_mst;
+
 	if (!i915_modparams.enable_dp_mst)
 		return;
 
 	if (!intel_dp->can_mst)
 		return;
 
+	was_mst = intel_dp->is_mst;
 	intel_dp->is_mst = intel_dp_can_mst(intel_dp);
 
-	if (intel_dp->is_mst)
+	if (intel_dp->is_mst) {
 		DRM_DEBUG_KMS("Sink is MST capable\n");
-	else
+
+		if (!was_mst)
+			intel_dp->mst_bw_locked = false;
+	} else {
 		DRM_DEBUG_KMS("Sink is not MST capable\n");
+	}
 
 	drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr,
 					intel_dp->is_mst);

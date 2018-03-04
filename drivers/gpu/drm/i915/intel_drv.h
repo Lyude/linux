@@ -1022,6 +1022,12 @@ struct intel_dp {
 	bool can_mst; /* this port supports mst */
 	bool is_mst;
 	int active_mst_links;
+	/* Set when we've already decided on a link bw for mst, to prevent us
+	 * from setting different link bandwiths if the hub tries to confuse
+	 * us by changing it later
+	 */
+	bool mst_bw_locked;
+
 	/* connector directly attached - won't be use for modeset in mst world */
 	struct intel_connector *attached_connector;
 

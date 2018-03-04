@@ -42,7 +42,7 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		to_intel_connector(conn_state->connector);
 	struct drm_atomic_state *state = pipe_config->base.state;
 	int bpp;
-	int lane_count, slots;
+	int lane_count, link_rate, slots;
 	const struct drm_display_mode *adjusted_mode = &pipe_config->base.adjusted_mode;
 	int mst_pbn;
 	bool reduce_m_n = drm_dp_has_quirk(&intel_dp->desc,
@@ -56,16 +56,22 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 			      bpp);
 	}
 	/*
-	 * for MST we always configure max link bw - the spec doesn't
-	 * seem to suggest we should do otherwise.
+	 * for MST we always configure max link bw if we don't know better -
+	 * the spec doesn't seem to suggest we should do otherwise. But,
+	 * ensure it always stays consistent with the rest of this hub's
+	 * state.
 	 */
-	lane_count = intel_dp_max_lane_count(intel_dp);
+	if (intel_dp->mst_bw_locked) {
+		lane_count = intel_dp->lane_count;
+		link_rate = intel_dp->link_rate;
+	} else {
+		lane_count = intel_dp_max_lane_count(intel_dp);
+		link_rate = intel_dp_max_link_rate(intel_dp);
+	}
 
 	pipe_config->lane_count = lane_count;
-
 	pipe_config->pipe_bpp = bpp;
-
-	pipe_config->port_clock = intel_dp_max_link_rate(intel_dp);
+	pipe_config->port_clock = link_rate;
 
 	if (drm_dp_mst_port_has_audio(&intel_dp->mst_mgr, connector->port))
 		pipe_config->has_audio = true;
@@ -220,6 +226,8 @@ static void intel_mst_pre_enable_dp(struct intel_encoder *encoder,
 	 */
 	connector->encoder = encoder;
 	intel_mst->connector = connector;
+
+	intel_dp->mst_bw_locked = true;
 
 	DRM_DEBUG_KMS("active links %d\n", intel_dp->active_mst_links);
 
