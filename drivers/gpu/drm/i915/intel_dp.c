@@ -4358,7 +4358,6 @@ int intel_dp_retrain_link(struct intel_encoder *encoder,
 	if (crtc->config->has_pch_encoder)
 		intel_set_pch_fifo_underrun_reporting(dev_priv,
 						      intel_crtc_pch_transcoder(crtc), true);
-
 	return 0;
 }
 

@@ -981,6 +981,12 @@ struct cxsr_latency {
 	u16 cursor_hpll_disable;
 };
 
+struct intel_dp_mst_topology_state {
+	struct drm_dp_mst_topology_state base;
+	int link_rate;
+	int lane_count;
+};
+
 #define to_intel_atomic_state(x) container_of(x, struct intel_atomic_state, base)
 #define to_intel_crtc(x) container_of(x, struct intel_crtc, base)
 #define to_intel_crtc_state(x) container_of(x, struct intel_crtc_state, base)
@@ -989,6 +995,7 @@ struct cxsr_latency {
 #define to_intel_framebuffer(x) container_of(x, struct intel_framebuffer, base)
 #define to_intel_plane(x) container_of(x, struct intel_plane, base)
 #define to_intel_plane_state(x) container_of(x, struct intel_plane_state, base)
+#define to_intel_dp_mst_topology_state(x) container_of(x, struct intel_dp_mst_topology_state, base);
 #define intel_fb_obj(x) (x ? to_intel_framebuffer(x)->obj : NULL)
 
 struct intel_hdmi {
@@ -1111,6 +1118,7 @@ struct intel_dp {
 	bool can_mst; /* this port supports mst */
 	bool is_mst;
 	int active_mst_links;
+
 	/* connector directly attached - won't be use for modeset in mst world */
 	struct intel_connector *attached_connector;
 

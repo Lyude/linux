@@ -41,8 +41,9 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
 	struct drm_atomic_state *state = pipe_config->base.state;
+	struct intel_dp_mst_topology_state *mst_state;
 	int bpp;
-	int lane_count, slots;
+	int slots;
 	const struct drm_display_mode *adjusted_mode = &pipe_config->base.adjusted_mode;
 	int mst_pbn;
 	bool reduce_m_n = drm_dp_has_quirk(&intel_dp->desc,
@@ -55,17 +56,23 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		DRM_DEBUG_KMS("Setting pipe bpp to %d\n",
 			      bpp);
 	}
+
+	mst_state = to_intel_dp_mst_topology_state(
+	    drm_atomic_dp_mst_get_topology_state(state, &intel_dp->mst_mgr));
 	/*
-	 * for MST we always configure max link bw - the spec doesn't
-	 * seem to suggest we should do otherwise.
+	 * for MST we always configure max link bw if we don't know better -
+	 * the spec doesn't seem to suggest we should do otherwise. But,
+	 * ensure it always stays consistent with the rest of this hub's
+	 * state.
 	 */
-	lane_count = intel_dp_max_lane_count(intel_dp);
+	if (!mst_state->link_rate || !mst_state->lane_count) {
+		mst_state->link_rate = intel_dp_max_link_rate(intel_dp);
+		mst_state->lane_count = intel_dp_max_lane_count(intel_dp);
+	}
 
-	pipe_config->lane_count = lane_count;
-
+	pipe_config->lane_count = mst_state->lane_count;
+	pipe_config->port_clock = mst_state->link_rate;
 	pipe_config->pipe_bpp = bpp;
-
-	pipe_config->port_clock = intel_dp_max_link_rate(intel_dp);
 
 	if (drm_dp_mst_port_has_audio(&intel_dp->mst_mgr, connector->port))
 		pipe_config->has_audio = true;
@@ -80,7 +87,7 @@ static bool intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		return false;
 	}
 
-	intel_link_compute_m_n(bpp, lane_count,
+	intel_link_compute_m_n(bpp, mst_state->lane_count,
 			       adjusted_mode->crtc_clock,
 			       pipe_config->port_clock,
 			       &pipe_config->dp_m_n,
@@ -524,11 +531,55 @@ static void intel_dp_mst_hotplug(struct drm_dp_mst_topology_mgr *mgr)
 	drm_kms_helper_hotplug_event(dev);
 }
 
+static void intel_mst_reset_state(struct drm_dp_mst_topology_state *state)
+{
+	struct intel_dp_mst_topology_state *intel_mst_state =
+		to_intel_dp_mst_topology_state(state);
+
+	intel_mst_state->link_rate = 0;
+	intel_mst_state->lane_count = 0;
+}
+
 static const struct drm_dp_mst_topology_cbs mst_cbs = {
 	.add_connector = intel_dp_add_mst_connector,
 	.register_connector = intel_dp_register_mst_connector,
 	.destroy_connector = intel_dp_destroy_mst_connector,
 	.hotplug = intel_dp_mst_hotplug,
+	.reset_state = intel_mst_reset_state,
+};
+
+static struct drm_private_state *
+intel_dp_mst_duplicate_state(struct drm_private_obj *obj)
+{
+	struct intel_dp_mst_topology_state *state;
+
+	state = kmemdup(obj->state, sizeof(*state), GFP_KERNEL);
+	if (!state)
+		return NULL;
+
+	__drm_atomic_dp_mst_duplicate_topology_state(
+	    to_dp_mst_topology_mgr(obj), &state->base);
+
+	return &state->base.base;
+}
+
+static void
+intel_dp_mst_destroy_state(struct drm_private_obj *obj,
+			   struct drm_private_state *state)
+{
+	struct drm_dp_mst_topology_state *mst_state =
+		to_dp_mst_topology_state(state);
+	struct intel_dp_mst_topology_state *intel_mst_state =
+		to_intel_dp_mst_topology_state(mst_state);
+
+	__drm_atomic_dp_mst_destroy_topology_state(mst_state);
+
+	kfree(intel_mst_state);
+}
+
+static const struct drm_private_state_funcs mst_state_funcs = {
+	.atomic_duplicate_state = intel_dp_mst_duplicate_state,
+	.atomic_destroy_state = intel_dp_mst_destroy_state,
 };
 
 static struct intel_dp_mst_encoder *
@@ -581,21 +632,16 @@ intel_dp_create_fake_mst_encoders(struct intel_digital_port *intel_dig_port)
 	return true;
 }
 
-static const struct drm_private_state_funcs mst_state_funcs = {
-	.atomic_destroy_state = drm_atomic_dp_mst_destroy_topology_state,
-	.atomic_duplicate_state = drm_atomic_dp_mst_duplicate_topology_state,
-};
-
 int
 intel_dp_mst_encoder_init(struct intel_digital_port *intel_dig_port, int conn_base_id)
 {
 	struct intel_dp *intel_dp = &intel_dig_port->dp;
-	struct drm_dp_mst_topology_state *mst_state;
+	struct intel_dp_mst_topology_state *intel_mst_state;
 	struct drm_device *dev = intel_dig_port->base.base.dev;
 	int ret;
 
-	mst_state = kzalloc(sizeof(*mst_state), GFP_KERNEL);
-	if (!mst_state)
+	intel_mst_state = kzalloc(sizeof(*intel_mst_state), GFP_KERNEL);
+	if (!intel_mst_state)
 		return -ENOMEM;
 
 	intel_dp->can_mst = true;
@@ -604,7 +650,8 @@ intel_dp_mst_encoder_init(struct intel_digital_port *intel_dig_port, int conn_ba
 
 	/* create encoders */
 	intel_dp_create_fake_mst_encoders(intel_dig_port);
-	ret = drm_dp_mst_topology_mgr_init(&intel_dp->mst_mgr, mst_state, dev,
+	ret = drm_dp_mst_topology_mgr_init(&intel_dp->mst_mgr,
+					   &intel_mst_state->base, dev,
 					   &intel_dp->aux, 16, 3, conn_base_id);
 	if (ret) {
 		intel_dp->can_mst = false;
