@@ -636,5 +636,7 @@ int drm_dp_send_power_updown_phy(struct drm_dp_mst_topology_mgr *mgr,
 
 int drm_dp_mst_topology_mgr_lower_link_rate(struct drm_dp_mst_topology_mgr *mgr,
 					    int dp_link_bw, int dp_link_count);
+int drm_atomic_dp_mst_retrain_topology(struct drm_atomic_state *state,
+				       struct drm_dp_mst_topology_mgr *mgr);
 
 #endif
