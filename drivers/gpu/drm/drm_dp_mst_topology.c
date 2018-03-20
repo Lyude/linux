@@ -2622,7 +2622,7 @@ int drm_dp_atomic_find_vcpi_slots(struct drm_atomic_state *state,
 	struct drm_dp_mst_topology_state *topology_state;
 	int req_slots;
 
-	topology_state = drm_atomic_get_mst_topology_state(state, mgr);
+	topology_state = drm_atomic_dp_mst_get_topology_state(state, mgr);
 	if (IS_ERR(topology_state))
 		return PTR_ERR(topology_state);
 
@@ -2662,7 +2662,7 @@ int drm_dp_atomic_release_vcpi_slots(struct drm_atomic_state *state,
 {
 	struct drm_dp_mst_topology_state *topology_state;
 
-	topology_state = drm_atomic_get_mst_topology_state(state, mgr);
+	topology_state = drm_atomic_dp_mst_get_topology_state(state, mgr);
 	if (IS_ERR(topology_state))
 		return PTR_ERR(topology_state);
 
@@ -3129,7 +3129,7 @@ static const struct drm_private_state_funcs mst_state_funcs = {
 };
 
 /**
- * drm_atomic_get_mst_topology_state: get MST topology state
+ * drm_atomic_dp_mst_get_topology_state: get MST topology state
  *
  * @state: global atomic state
  * @mgr: MST topology manager, also the private object in this case
@@ -3143,15 +3143,16 @@ static const struct drm_private_state_funcs mst_state_funcs = {
  *
  * The MST topology state or error pointer.
  */
-struct drm_dp_mst_topology_state *drm_atomic_get_mst_topology_state(struct drm_atomic_state *state,
-								    struct drm_dp_mst_topology_mgr *mgr)
+struct drm_dp_mst_topology_state *
+drm_atomic_dp_mst_get_topology_state(struct drm_atomic_state *state,
+				     struct drm_dp_mst_topology_mgr *mgr)
 {
 	struct drm_device *dev = mgr->dev;
 
 	WARN_ON(!drm_modeset_is_locked(&dev->mode_config.connection_mutex));
 	return to_dp_mst_topology_state(drm_atomic_get_private_obj_state(state, &mgr->base));
 }
-EXPORT_SYMBOL(drm_atomic_get_mst_topology_state);
+EXPORT_SYMBOL(drm_atomic_dp_mst_get_topology_state);
 
 /**
  * drm_dp_mst_topology_mgr_init - initialise a topology manager
