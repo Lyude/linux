@@ -2096,6 +2096,16 @@ static bool drm_dp_get_vc_payload_bw(int dp_link_bw,
 	return true;
 }
 
+static void drm_dp_mst_topology_reset_state(struct drm_dp_mst_topology_mgr *mgr)
+{
+	struct drm_dp_mst_topology_state *state =
+		to_dp_mst_topology_state(mgr->base.state);
+
+
+	if (mgr->cbs->reset_state)
+		mgr->cbs->reset_state(state);
+}
+
 /**
  * drm_dp_mst_topology_mgr_set_mst() - Set the MST state for a topology manager
  * @mgr: manager to set state for
@@ -2171,6 +2181,7 @@ int drm_dp_mst_topology_mgr_set_mst(struct drm_dp_mst_topology_mgr *mgr, bool ms
 		mgr->payload_mask = 0;
 		set_bit(0, &mgr->payload_mask);
 		mgr->vcpi_mask = 0;
+		drm_dp_mst_topology_reset_state(mgr);
 	}
 
 out_unlock:
