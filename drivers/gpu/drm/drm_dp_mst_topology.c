@@ -3100,33 +3100,89 @@ static void drm_dp_destroy_connector_work(struct work_struct *work)
 		(*mgr->cbs->hotplug)(mgr);
 }
 
-static struct drm_private_state *
-drm_dp_mst_duplicate_state(struct drm_private_obj *obj)
+/**
+ * drm_atomic_dp_mst_duplicate_topology_state - default
+ * drm_dp_mst_topology_state duplicate handler
+ *
+ * For drivers which don't yet subclass drm_dp_mst_topology_state
+ *
+ * RETURNS: the duplicated state on success, or an error code embedded into a
+ * pointer value otherwise.
+ */
+struct drm_private_state *
+drm_atomic_dp_mst_duplicate_topology_state(struct drm_private_obj *obj)
 {
+	struct drm_dp_mst_topology_mgr *mgr = to_dp_mst_topology_mgr(obj);
 	struct drm_dp_mst_topology_state *state;
+	int ret;
 
 	state = kmemdup(obj->state, sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return NULL;
 
-	__drm_atomic_helper_private_obj_duplicate_state(obj, &state->base);
+	ret = __drm_atomic_dp_mst_duplicate_topology_state(mgr, state);
+	if (ret) {
+		kfree(state);
+		return NULL;
+	}
 
 	return &state->base;
 }
+EXPORT_SYMBOL(drm_atomic_dp_mst_duplicate_topology_state);
 
-static void drm_dp_mst_destroy_state(struct drm_private_obj *obj,
-				     struct drm_private_state *state)
+/**
+ * __drm_atomic_dp_mst_duplicate_topology_state - default
+ * drm_dp_mst_topology_state duplicate hook
+ *
+ * Copies atomic state from an MST topology's current state. This is useful
+ * for drivers that subclass the MST topology state.
+ *
+ * RETURNS: 0 on success, negative error code on failure.
+ */
+int
+__drm_atomic_dp_mst_duplicate_topology_state(struct drm_dp_mst_topology_mgr *mgr,
+					     struct drm_dp_mst_topology_state *state)
+{
+	struct drm_private_obj *obj = &mgr->base;
+
+	memcpy(state, obj->state, sizeof(*state));
+
+	__drm_atomic_helper_private_obj_duplicate_state(&mgr->base,
+							&state->base);
+	return 0;
+}
+EXPORT_SYMBOL(__drm_atomic_dp_mst_duplicate_topology_state);
+
+/**
+ * drm_atomic_dp_mst_destroy_topology_state - default
+ * drm_dp_mst_topology_state destroy handler
+ *
+ * For drivers which don't yet subclass drm_dp_mst_topology_state.
+ */
+void
+drm_atomic_dp_mst_destroy_topology_state(struct drm_private_obj *obj,
+					 struct drm_private_state *state)
 {
 	struct drm_dp_mst_topology_state *mst_state =
 		to_dp_mst_topology_state(state);
 
+	__drm_atomic_dp_mst_destroy_topology_state(mst_state);
+
 	kfree(mst_state);
 }
+EXPORT_SYMBOL(drm_atomic_dp_mst_destroy_topology_state);
 
-static const struct drm_private_state_funcs mst_state_funcs = {
-	.atomic_duplicate_state = drm_dp_mst_duplicate_state,
-	.atomic_destroy_state = drm_dp_mst_destroy_state,
-};
+/**
+ * __drm_atomic_dp_mst_destroy_topology_state - default
+ * drm_dp_mst_topology_state destroy hook
+ *
+ * Frees the resources associated with the given drm_dp_mst_topology_state.
+ * This is useful for drivers that subclass the MST topology state.
+ */
+void
+__drm_atomic_dp_mst_destroy_topology_state(struct drm_dp_mst_topology_state *state) {
+}
+EXPORT_SYMBOL(__drm_atomic_dp_mst_destroy_topology_state);
 
 /**
  * drm_atomic_dp_mst_get_topology_state: get MST topology state
@@ -3157,21 +3213,25 @@ EXPORT_SYMBOL(drm_atomic_dp_mst_get_topology_state);
 /**
  * drm_dp_mst_topology_mgr_init - initialise a topology manager
  * @mgr: manager struct to initialise
+ * @state: atomic topology state to init, allocated by the driver
  * @dev: device providing this structure - for i2c addition.
  * @aux: DP helper aux channel to talk to this device
  * @max_dpcd_transaction_bytes: hw specific DPCD transaction limit
  * @max_payloads: maximum number of payloads this GPU can source
  * @conn_base_id: the connector object ID the MST device is connected to.
  *
+ * Note that this function doesn't take care of allocating the atomic MST
+ * state, this must be handled by the caller before calling
+ * drm_dp_mst_topology_mgr_init().
+ *
  * Return 0 for success, or negative error code on failure
  */
 int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,
+				 struct drm_dp_mst_topology_state *state,
 				 struct drm_device *dev, struct drm_dp_aux *aux,
 				 int max_dpcd_transaction_bytes,
 				 int max_payloads, int conn_base_id)
 {
-	struct drm_dp_mst_topology_state *mst_state;
-
 	mutex_init(&mgr->lock);
 	mutex_init(&mgr->qlock);
 	mutex_init(&mgr->payload_lock);
@@ -3200,18 +3260,14 @@ int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,
 	if (test_calc_pbn_mode() < 0)
 		DRM_ERROR("MST PBN self-test failed\n");
 
-	mst_state = kzalloc(sizeof(*mst_state), GFP_KERNEL);
-	if (mst_state == NULL)
-		return -ENOMEM;
-
-	mst_state->mgr = mgr;
+	state->mgr = mgr;
 
 	/* max. time slots - one slot for MTP header */
-	mst_state->avail_slots = 63;
+	state->avail_slots = 63;
 
 	drm_atomic_private_obj_init(&mgr->base,
-				    &mst_state->base,
-				    &mst_state_funcs);
+				    &state->base,
+				    mgr->funcs);
 
 	return 0;
 }

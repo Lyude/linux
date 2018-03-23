@@ -3322,6 +3322,12 @@ nv50_mstm = {
 	.hotplug = nv50_mstm_hotplug,
 };
 
+static const struct drm_private_state_funcs
+nv50_mst_state_funcs = {
+	.atomic_duplicate_state = drm_atomic_dp_mst_duplicate_topology_state,
+	.atomic_destroy_state = drm_atomic_dp_mst_destroy_topology_state,
+};
+
 void
 nv50_mstm_service(struct nv50_mstm *mstm)
 {
@@ -3450,6 +3456,7 @@ nv50_mstm_new(struct nouveau_encoder *outp, struct drm_dp_aux *aux, int aux_max,
 {
 	const int max_payloads = hweight8(outp->dcb->heads);
 	struct drm_device *dev = outp->base.base.dev;
+	struct drm_dp_mst_topology_state *state;
 	struct nv50_mstm *mstm;
 	int ret, i;
 	u8 dpcd;
@@ -3466,10 +3473,16 @@ nv50_mstm_new(struct nouveau_encoder *outp, struct drm_dp_aux *aux, int aux_max,
 
 	if (!(mstm = *pmstm = kzalloc(sizeof(*mstm), GFP_KERNEL)))
 		return -ENOMEM;
+	if (!(state = kzalloc(sizeof(*state), GFP_KERNEL))) {
+		kfree(mstm);
+		return -ENOMEM;
+	}
 	mstm->outp = outp;
 	mstm->mgr.cbs = &nv50_mstm;
+	mstm->mgr.funcs = &nv50_mst_state_funcs;
 
-	ret = drm_dp_mst_topology_mgr_init(&mstm->mgr, dev, aux, aux_max,
+	ret = drm_dp_mst_topology_mgr_init(&mstm->mgr, state, dev,
+					   aux, aux_max,
 					   max_payloads, conn_base_id);
 	if (ret)
 		return ret;

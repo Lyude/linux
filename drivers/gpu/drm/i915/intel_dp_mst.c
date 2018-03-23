@@ -581,19 +581,30 @@ intel_dp_create_fake_mst_encoders(struct intel_digital_port *intel_dig_port)
 	return true;
 }
 
+static const struct drm_private_state_funcs mst_state_funcs = {
+	.atomic_destroy_state = drm_atomic_dp_mst_destroy_topology_state,
+	.atomic_duplicate_state = drm_atomic_dp_mst_duplicate_topology_state,
+};
+
 int
 intel_dp_mst_encoder_init(struct intel_digital_port *intel_dig_port, int conn_base_id)
 {
 	struct intel_dp *intel_dp = &intel_dig_port->dp;
+	struct drm_dp_mst_topology_state *mst_state;
 	struct drm_device *dev = intel_dig_port->base.base.dev;
 	int ret;
 
+	mst_state = kzalloc(sizeof(*mst_state), GFP_KERNEL);
+	if (!mst_state)
+		return -ENOMEM;
+
 	intel_dp->can_mst = true;
 	intel_dp->mst_mgr.cbs = &mst_cbs;
+	intel_dp->mst_mgr.funcs = &mst_state_funcs;
 
 	/* create encoders */
 	intel_dp_create_fake_mst_encoders(intel_dig_port);
-	ret = drm_dp_mst_topology_mgr_init(&intel_dp->mst_mgr, dev,
+	ret = drm_dp_mst_topology_mgr_init(&intel_dp->mst_mgr, mst_state, dev,
 					   &intel_dp->aux, 16, 3, conn_base_id);
 	if (ret) {
 		intel_dp->can_mst = false;

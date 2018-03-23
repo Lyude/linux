@@ -335,6 +335,11 @@ static const struct drm_dp_mst_topology_cbs mst_cbs = {
 	.hotplug = radeon_dp_mst_hotplug,
 };
 
+static const struct drm_private_state_funcs mst_state_funcs = {
+	.atomic_duplicate_state = drm_atomic_dp_mst_duplicate_topology_state,
+	.atomic_destroy_state = drm_atomic_dp_mst_destroy_topology_state,
+};
+
 static struct
 radeon_connector *radeon_mst_find_connector(struct drm_encoder *encoder)
 {
@@ -657,12 +662,18 @@ int
 radeon_dp_mst_init(struct radeon_connector *radeon_connector)
 {
 	struct drm_device *dev = radeon_connector->base.dev;
+	struct drm_dp_mst_topology_state *state =
+		kzalloc(sizeof(*state), GFP_KERNEL);
 
+	if (!state)
+		return -ENOMEM;
 	if (!radeon_connector->ddc_bus->has_aux)
 		return 0;
 
 	radeon_connector->mst_mgr.cbs = &mst_cbs;
-	return drm_dp_mst_topology_mgr_init(&radeon_connector->mst_mgr, dev,
+	radeon_connector->mst_mgr.funcs = &mst_state_funcs;
+	return drm_dp_mst_topology_mgr_init(&radeon_connector->mst_mgr,
+					    state, dev,
 					    &radeon_connector->ddc_bus->aux, 16, 6,
 					    radeon_connector->base.base.id);
 }

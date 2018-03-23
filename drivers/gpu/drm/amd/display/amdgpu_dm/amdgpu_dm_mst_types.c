@@ -471,22 +471,49 @@ static const struct drm_dp_mst_topology_cbs dm_mst_cbs = {
 	.register_connector = dm_dp_mst_register_connector
 };
 
-void amdgpu_dm_initialize_dp_connector(struct amdgpu_display_manager *dm,
-				       struct amdgpu_dm_connector *aconnector)
+static const struct drm_private_state_funcs dm_mst_state_funcs = {
+	.atomic_duplicate_state = drm_atomic_dp_mst_duplicate_topology_state,
+	.atomic_destroy_state = drm_atomic_dp_mst_destroy_topology_state,
+};
+
+int amdgpu_dm_initialize_dp_connector(struct amdgpu_display_manager *dm,
+				      struct amdgpu_dm_connector *aconnector)
 {
+	struct drm_dp_mst_topology_state *state =
+		kzalloc(sizeof(*state), GFP_KERNEL);
+	int ret = 0;
+
+	if (!state)
+		return -ENOMEM;
+
 	aconnector->dm_dp_aux.aux.name = "dmdc";
 	aconnector->dm_dp_aux.aux.dev = dm->adev->dev;
 	aconnector->dm_dp_aux.aux.transfer = dm_dp_aux_transfer;
 	aconnector->dm_dp_aux.ddc_service = aconnector->dc_link->ddc;
 
-	drm_dp_aux_register(&aconnector->dm_dp_aux.aux);
+	ret = drm_dp_aux_register(&aconnector->dm_dp_aux.aux);
+	if (ret)
+		goto err_aux;
+
 	aconnector->mst_mgr.cbs = &dm_mst_cbs;
-	drm_dp_mst_topology_mgr_init(
+	aconnector->mst_mgr.funcs = &dm_mst_state_funcs;
+	ret = drm_dp_mst_topology_mgr_init(
 		&aconnector->mst_mgr,
+		state,
 		dm->adev->ddev,
 		&aconnector->dm_dp_aux.aux,
 		16,
 		4,
 		aconnector->connector_id);
+	if (ret)
+		goto err_mst;
+
+	return 0;
+
+err_mst:
+	drm_dp_aux_unregister(&aconnector->dm_dp_aux.aux);
+err_aux:
+	kfree(state);
+	return ret;
 }
 

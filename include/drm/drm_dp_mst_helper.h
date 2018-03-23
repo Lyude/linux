@@ -565,6 +565,7 @@ struct drm_dp_mst_topology_mgr {
 };
 
 int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,
+				 struct drm_dp_mst_topology_state *state,
 				 struct drm_device *dev, struct drm_dp_aux *aux,
 				 int max_dpcd_transaction_bytes,
 				 int max_payloads, int conn_base_id);
@@ -620,6 +621,13 @@ int drm_dp_mst_topology_mgr_resume(struct drm_dp_mst_topology_mgr *mgr);
 
 struct drm_dp_mst_topology_state *drm_atomic_dp_mst_get_topology_state(struct drm_atomic_state *state,
 								       struct drm_dp_mst_topology_mgr *mgr);
+struct drm_private_state *drm_atomic_dp_mst_duplicate_topology_state(struct drm_private_obj *obj);
+int __drm_atomic_dp_mst_duplicate_topology_state(struct drm_dp_mst_topology_mgr *mgr,
+						 struct drm_dp_mst_topology_state *state);
+void drm_atomic_dp_mst_destroy_topology_state(struct drm_private_obj *obj,
+					      struct drm_private_state *state);
+void __drm_atomic_dp_mst_destroy_topology_state(struct drm_dp_mst_topology_state *state);
+
 int drm_dp_atomic_find_vcpi_slots(struct drm_atomic_state *state,
 				  struct drm_dp_mst_topology_mgr *mgr,
 				  struct drm_dp_mst_port *port, int pbn);

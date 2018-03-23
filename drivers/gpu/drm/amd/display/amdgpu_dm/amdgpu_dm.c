@@ -3561,9 +3561,17 @@ static int amdgpu_dm_connector_init(struct amdgpu_display_manager *dm,
 
 	drm_connector_register(&aconnector->base);
 
-	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort
-		|| connector_type == DRM_MODE_CONNECTOR_eDP)
-		amdgpu_dm_initialize_dp_connector(dm, aconnector);
+	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	    connector_type == DRM_MODE_CONNECTOR_eDP) {
+		res = amdgpu_dm_initialize_dp_connector(dm, aconnector);
+		if (res) {
+			drm_connector_unregister(&aconnector->base);
+			drm_connector_cleanup(&aconnector->base);
+			aconnector->connector_id = -1;
+
+			goto out_free;
+		}
+	}
 
 #if defined(CONFIG_BACKLIGHT_CLASS_DEVICE) ||\
 	defined(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
