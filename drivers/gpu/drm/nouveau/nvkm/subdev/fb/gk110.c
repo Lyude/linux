@@ -32,6 +32,18 @@
  * PGRAPH registers for clockgating
  *******************************************************************************
  */
+static const struct nvkm_therm_clkgate_init
+gk110_fb_clkgate_slcg_init_bcast_0[] = {
+	{ 0x10f280, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gk110_fb_clkgate_slcg_init_pxbar_0[] = {
+	{ 0x13cafc, 1, 0x0000007e },
+	{ 0x13cbe4, 1, 0x1ffffffe },
+	{}
+};
 
 static const struct nvkm_therm_clkgate_init
 gk110_fb_clkgate_blcg_init_unk_0[] = {
@@ -45,6 +57,8 @@ gk110_fb_clkgate_blcg_init_unk_0[] = {
 
 static const struct nvkm_therm_clkgate_pack
 gk110_fb_clkgate_pack[] = {
+	{ gk110_fb_clkgate_slcg_init_bcast_0 },
+	{ gk110_fb_clkgate_slcg_init_pxbar_0 },
 	{ gk110_fb_clkgate_blcg_init_unk_0 },
 	{ gk104_fb_clkgate_blcg_init_vm_0 },
 	{ gk104_fb_clkgate_blcg_init_main_0 },
