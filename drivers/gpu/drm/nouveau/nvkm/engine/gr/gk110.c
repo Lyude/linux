@@ -23,6 +23,7 @@
  */
 #include "gf100.h"
 #include "gk104.h"
+#include "gk110.h"
 #include "ctxgf100.h"
 
 #include <subdev/timer.h>
@@ -157,26 +158,26 @@ gk110_gr_pack_mmio[] = {
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_blcg_init_sked_0[] = {
 	{ 0x407000, 1, 0x00004041 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_blcg_init_gpc_gcc_0[] = {
 	{ 0x419020, 1, 0x00000042 },
 	{ 0x419038, 1, 0x00000042 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_blcg_init_gpc_l1c_0[] = {
 	{ 0x419cd4, 2, 0x00004042 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_blcg_init_gpc_mp_0[] = {
 	{ 0x419fd0, 1, 0x00004043 },
 	{ 0x419fd8, 1, 0x00004049 },
@@ -187,32 +188,32 @@ gk110_clkgate_blcg_init_gpc_mp_0[] = {
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_main_0[] = {
 	{ 0x4041f4, 1, 0x00000000 },
 	{ 0x409894, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_unk_0[] = {
 	{ 0x406004, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_sked_0[] = {
 	{ 0x407004, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_ctxctl_0[] = {
 	{ 0x41a894, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_unk_0[] = {
 	{ 0x418504, 1, 0x00000000 },
 	{ 0x41860c, 1, 0x00000000 },
@@ -220,31 +221,31 @@ gk110_clkgate_slcg_init_gpc_unk_0[] = {
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_esetup_0[] = {
 	{ 0x41882c, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_zcull_0[] = {
 	{ 0x418974, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_l1c_0[] = {
 	{ 0x419cd8, 2, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_unk_1[] = {
 	{ 0x419c74, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_mp_0[] = {
 	{ 0x419fd4, 1, 0x00004a4a },
 	{ 0x419fdc, 1, 0x00000014 },
@@ -253,13 +254,13 @@ gk110_clkgate_slcg_init_gpc_mp_0[] = {
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_gpc_ppc_0[] = {
 	{ 0x41be2c, 1, 0x00000000 },
 	{}
 };
 
-static const struct nvkm_therm_clkgate_init
+const struct nvkm_therm_clkgate_init
 gk110_clkgate_slcg_init_pcounter_0[] = {
 	{ 0x1be018, 1, 0x000001ff },
 	{ 0x1bc018, 1, 0x000001ff },

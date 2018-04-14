@@ -45,4 +45,11 @@ struct gk104_therm {
 extern const struct gk104_clkgate_engine_info gk104_clkgate_engine_info[];
 extern const struct gf100_idle_filter gk104_idle_filter;
 
+int gk104_therm_new_(const struct nvkm_therm_func *,
+		     struct nvkm_device *,
+		     int,
+		     const struct gk104_clkgate_engine_info *,
+		     const struct gf100_idle_filter *,
+		     struct nvkm_therm **);
+
 #endif

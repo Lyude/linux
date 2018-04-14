@@ -23,10 +23,13 @@
  */
 #include "gf100.h"
 #include "ctxgf100.h"
+#include "gk104.h"
+#include "gk110.h"
 
 #include <subdev/bios.h>
 #include <subdev/bios/P0260.h>
 #include <subdev/fb.h>
+#include <subdev/therm.h>
 
 #include <nvif/class.h>
 
@@ -275,6 +278,247 @@ gm107_gr_pack_mmio[] = {
 	{}
 };
 
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_blcg_init_unk_0[] = {
+	{ 0x406000, 1, 0x00004044 },
+	{ 0x405860, 1, 0x00004042 },
+	{ 0x40590c, 1, 0x00004044 },
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_blcg_init_gpc_unk_0[] = {
+	{ 0x418500, 1, 0x00004044 },
+	{ 0x418608, 1, 0x00004042 },
+	{ 0x418688, 1, 0x00004042 },
+	{ 0x418718, 1, 0x00000042 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_blcg_init_gpc_unk_1[] = {
+	{ 0x418cf0, 1, 0x00004044 },
+	{ 0x418d70, 1, 0x00004044 },
+	{ 0x418f0c, 1, 0x00004044 },
+	{ 0x418e0c, 1, 0x00004044 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_blcg_init_gpc_tex_0[] = {
+	{ 0x419a40, 9, 0x00004042 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_blcg_init_gpc_l1c_0[] = {
+	{ 0x419cd4, 2, 0x00000002 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_blcg_init_gpc_mp_0[] = {
+	{ 0x419fd0, 1, 0x00000044 },
+	{ 0x419fd8, 1, 0x00000045 },
+	{ 0x419fe0, 1, 0x00000044 },
+	{ 0x419fe8, 1, 0x00000042 },
+	{ 0x419ff0, 1, 0x00000045 },
+	{ 0x419ff8, 1, 0x00000002 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_blcg_init_gpc_ppc_0[] = {
+	{ 0x41be28, 1, 0x00000042 },
+	{ 0x41bfe8, 1, 0x00004044 },
+	{ 0x41bed0, 1, 0x00004044 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_main_0[] = {
+	{ 0x4041f4, 1, 0x00000002 },
+	{ 0x409894, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_rstr2d_0[] = {
+	{ 0x4078c4, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_unk_0[] = {
+	{ 0x406004, 1, 0x00000000 },
+	{ 0x405864, 1, 0x00000000 },
+	{ 0x405910, 1, 0xfffffff0 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gcc_0[] = {
+	{ 0x408044, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_unk_0[] = {
+	{ 0x418504, 1, 0x0001fffe },
+	{ 0x41860c, 1, 0x00000000 },
+	{ 0x41868c, 1, 0x00000000 },
+	{ 0x41871c, 1, 0x00000000 },
+	{ 0x418388, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_tpbus_0[] = {
+	{ 0x418bc0, 1, 0x00000004 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_zcull_0[] = {
+	{ 0x418974, 1, 0x00000028 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_tpconf_1[] = {
+	{ 0x418c74, 1, 0xffffffc0 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_unk_1[] = {
+	{ 0x418504, 1, 0x0001fffe },
+	{ 0x41860c, 1, 0x00000000 },
+	{ 0x41868c, 1, 0x00000000 },
+	{ 0x41871c, 1, 0x00000000 },
+	{ 0x418388, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_gcc_0[] = {
+	{ 0x419024, 1, 0x000001fe },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_ffb_0[] = {
+	{ 0x41889c, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_tex_0[] = {
+	{ 0x419d64, 1, 0x00000000 },
+	{ 0x419a44, 9, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_poly_0[] = {
+	{ 0x41986c, 1, 0x00001fc4 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_unk_2[] = {
+	{ 0x419c74, 1, 0x0000001e },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_gpc_mp_0[] = {
+	{ 0x419fd4, 3, 0x00000000 },
+	{ 0x419ff4, 2, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_ppc_0[] = {
+	{ 0x41be2c, 1, 0x04135fc0 },
+	{ 0x41bfec, 1, 0xfffffff0 },
+	{ 0x41bed4, 1, 0xfffffffe },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_rop_zrop_0[] = {
+	{ 0x4089ac, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_rop_0[] = {
+	{ 0x408a24, 1, 0x00000000 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_init
+gm107_clkgate_slcg_init_pcounter_0[] = {
+	{ 0x1be018, 1, 0x000001ff },
+	{ 0x1bc018, 1, 0x000001ff },
+	{ 0x1bc218, 1, 0x000001ff },
+	{ 0x1b8018, 1, 0x000001ff },
+	{ 0x1b4124, 1, 0x00000001 },
+	{}
+};
+
+static const struct nvkm_therm_clkgate_pack
+gm107_clkgate_pack[] = {
+	{ gk104_clkgate_blcg_init_main_0 },
+	{ gk104_clkgate_blcg_init_rstr2d_0 },
+	{ gm107_clkgate_blcg_init_unk_0 },
+	{ gk104_clkgate_blcg_init_gcc_0 },
+	{ gk110_clkgate_blcg_init_sked_0 },
+	{ gk104_clkgate_blcg_init_unk_1 },
+	{ gk104_clkgate_blcg_init_gpc_ctxctl_0 },
+	{ gm107_clkgate_blcg_init_gpc_unk_0 },
+	{ gk104_clkgate_blcg_init_gpc_esetup_0 },
+	{ gk104_clkgate_blcg_init_gpc_tpbus_0 },
+	{ gk104_clkgate_blcg_init_gpc_zcull_0 },
+	{ gm107_clkgate_blcg_init_gpc_unk_1 },
+	{ gk104_clkgate_blcg_init_gpc_gcc_0 },
+	{ gk104_clkgate_blcg_init_gpc_ffb_0 },
+	{ gm107_clkgate_blcg_init_gpc_tex_0 },
+	{ gk104_clkgate_blcg_init_gpc_poly_0 },
+	{ gm107_clkgate_blcg_init_gpc_l1c_0 },
+	{ gk104_clkgate_blcg_init_gpc_unk_2 },
+	{ gm107_clkgate_blcg_init_gpc_mp_0 },
+	{ gm107_clkgate_blcg_init_gpc_ppc_0 },
+	{ gk104_clkgate_blcg_init_rop_zrop_0 },
+	{ gk104_clkgate_blcg_init_rop_0 },
+	{ gk104_clkgate_blcg_init_rop_crop_0 },
+	{ gk104_clkgate_blcg_init_pxbar_0 },
+	{ gm107_clkgate_slcg_init_main_0 },
+	{ gm107_clkgate_slcg_init_rstr2d_0 },
+	{ gm107_clkgate_slcg_init_unk_0 },
+	{ gm107_clkgate_slcg_init_gcc_0 },
+	{ gk110_clkgate_slcg_init_sked_0 },
+	{ gk110_clkgate_slcg_init_gpc_ctxctl_0 },
+	{ gm107_clkgate_slcg_init_gpc_unk_0 },
+	{ gk110_clkgate_slcg_init_gpc_esetup_0 },
+	{ gm107_clkgate_slcg_init_gpc_tpbus_0 },
+	{ gm107_clkgate_slcg_init_gpc_zcull_0 },
+	{ gm107_clkgate_slcg_init_gpc_tpconf_1 },
+	{ gm107_clkgate_slcg_init_gpc_unk_1 },
+	{ gm107_clkgate_slcg_init_gpc_gcc_0 },
+	{ gm107_clkgate_slcg_init_gpc_ffb_0 },
+	{ gm107_clkgate_slcg_init_gpc_tex_0 },
+	{ gm107_clkgate_slcg_init_gpc_poly_0 },
+	{ gk110_clkgate_slcg_init_gpc_l1c_0 },
+	{ gm107_clkgate_slcg_init_gpc_unk_2 },
+	{ gm107_clkgate_slcg_init_gpc_mp_0 },
+	{ gm107_clkgate_slcg_init_ppc_0 },
+	{ gm107_clkgate_slcg_init_rop_zrop_0 },
+	{ gm107_clkgate_slcg_init_rop_0 },
+	{ gm107_clkgate_slcg_init_pcounter_0 },
+	{}
+};
+
 /*******************************************************************************
  * PGRAPH engine/subdev functions
  ******************************************************************************/
@@ -326,6 +570,9 @@ gm107_gr_init(struct gf100_gr *gr)
 	nvkm_wr32(device, GPC_BCAST(0x08b8), nvkm_memory_addr(fb->mmu_rd) >> 8);
 
 	gf100_gr_mmio(gr, gr->func->mmio);
+	if (gr->func->clkgate_pack)
+		nvkm_therm_clkgate_init(gr->base.engine.subdev.device->therm,
+					gr->func->clkgate_pack);
 
 	gm107_gr_init_bios(gr);
 
@@ -450,6 +697,7 @@ gm107_gr = {
 	.rops = gf100_gr_rops,
 	.ppc_nr = 2,
 	.grctx = &gm107_grctx,
+	.clkgate_pack = gm107_clkgate_pack,
 	.sclass = {
 		{ -1, -1, FERMI_TWOD_A },
 		{ -1, -1, KEPLER_INLINE_TO_MEMORY_B },

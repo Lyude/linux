@@ -105,7 +105,7 @@ gk104_therm_func = {
 	.clkgate_fini = gk104_clkgate_fini,
 };
 
-static int
+int
 gk104_therm_new_(const struct nvkm_therm_func *func,
 		 struct nvkm_device *device,
 		 int index,

@@ -22,6 +22,36 @@
  * Authors: Martin Peres
  */
 #include "priv.h"
+#include "gk104.h"
+
+void
+gm107_clkgate_enable(struct nvkm_therm *base)
+{
+	struct gk104_therm *therm = gk104_therm(base);
+	struct nvkm_device *dev = therm->base.subdev.device;
+	const struct gk104_clkgate_engine_info *order = therm->clkgate_order;
+	int i;
+
+	/* Program ENG_MANT, ENG_FILTER */
+	for (i = 0; order[i].engine != NVKM_SUBDEV_NR; i++) {
+		if (!nvkm_device_subdev(dev, order[i].engine))
+			continue;
+
+		nvkm_mask(dev, 0x20200 + order[i].offset, 0xff00, 0x2200);
+	}
+
+	/* magic */
+	nvkm_wr32(dev, 0x020288, therm->idle_filter->fecs);
+	nvkm_wr32(dev, 0x02028c, therm->idle_filter->hubmmu);
+
+	/* Enable clockgating (ENG_CLK = RUN->AUTO) */
+	for (i = 0; order[i].engine != NVKM_SUBDEV_NR; i++) {
+		if (!nvkm_device_subdev(dev, order[i].engine))
+			continue;
+
+		nvkm_mask(dev, 0x20200 + order[i].offset, 0x00ff, 0x0045);
+	}
+}
 
 static int
 gm107_fan_pwm_ctrl(struct nvkm_therm *therm, int line, bool enable)
@@ -54,6 +84,11 @@ gm107_fan_pwm_clock(struct nvkm_therm *therm, int line)
 	return therm->subdev.device->crystal * 1000;
 }
 
+const struct gf100_idle_filter gm107_idle_filter = {
+	.fecs = 0x00000000,
+	.hubmmu = 0x00000000,
+};
+
 static const struct nvkm_therm_func
 gm107_therm = {
 	.init = gf119_therm_init,
@@ -65,11 +100,16 @@ gm107_therm = {
 	.temp_get = g84_temp_get,
 	.fan_sense = gt215_therm_fan_sense,
 	.program_alarms = nvkm_therm_program_alarms_polling,
+	.clkgate_init = gf100_clkgate_init,
+	.clkgate_enable = gm107_clkgate_enable,
+	.clkgate_fini = gk104_clkgate_fini,
 };
 
 int
 gm107_therm_new(struct nvkm_device *device, int index,
 		struct nvkm_therm **ptherm)
 {
-	return nvkm_therm_new_(&gm107_therm, device, index, ptherm);
+	return gk104_therm_new_(&gm107_therm, device, index,
+				gk104_clkgate_engine_info, &gm107_idle_filter,
+				ptherm);
 }
