@@ -44,6 +44,7 @@
 #include <nvif/cl507d.h>
 #include <nvif/event.h>
 
+#include "nouveau_display.h"
 #include "nouveau_drv.h"
 #include "nouveau_dma.h"
 #include "nouveau_gem.h"
@@ -2015,7 +2016,7 @@ nv50_disp_atomic_state_alloc(struct drm_device *dev)
 static const struct drm_mode_config_funcs
 nv50_disp_func = {
 	.fb_create = nouveau_user_framebuffer_create,
-	.output_poll_changed = drm_fb_helper_output_poll_changed,
+	.output_poll_changed = nouveau_output_poll_changed,
 	.atomic_check = nv50_disp_atomic_check,
 	.atomic_commit = nv50_disp_atomic_commit,
 	.atomic_state_alloc = nv50_disp_atomic_state_alloc,

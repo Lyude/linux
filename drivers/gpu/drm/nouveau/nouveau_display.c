@@ -291,9 +291,34 @@ nouveau_user_framebuffer_create(struct drm_device *dev,
 	return ERR_PTR(ret);
 }
 
+static void
+nouveau_output_poll_changed_work(struct work_struct *work)
+{
+	struct nouveau_drm *drm = container_of(work, struct nouveau_drm,
+					       output_poll_changed_work);
+
+	pm_runtime_get_sync(drm->dev->dev);
+
+	drm_fb_helper_output_poll_changed(drm->dev);
+
+	pm_runtime_mark_last_busy(drm->dev->dev);
+	pm_runtime_put_autosuspend(drm->dev->dev);
+}
+
+void
+nouveau_output_poll_changed(struct drm_device *dev)
+{
+	/* We run the fb_helper functions in a separate worker so that this
+	 * can be called from runtime suspend/resume callpaths without
+	 * potentially deadlocking if the device needs to be woken up again
+	 * from the output_poll_changed context.
+	 */
+	schedule_work(&nouveau_drm(dev)->output_poll_changed_work);
+}
+
 static const struct drm_mode_config_funcs nouveau_mode_config_funcs = {
 	.fb_create = nouveau_user_framebuffer_create,
-	.output_poll_changed = drm_fb_helper_output_poll_changed,
+	.output_poll_changed = nouveau_output_poll_changed,
 };
 
 
@@ -568,6 +593,8 @@ nouveau_display_create(struct drm_device *dev)
 
 	nouveau_backlight_init(dev);
 	INIT_WORK(&drm->hpd_work, nouveau_display_hpd_work);
+	INIT_WORK(&drm->output_poll_changed_work,
+		  nouveau_output_poll_changed_work);
 #ifdef CONFIG_ACPI
 	drm->acpi_nb.notifier_call = nouveau_display_acpi_ntfy;
 	register_acpi_notifier(&drm->acpi_nb);

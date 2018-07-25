@@ -62,7 +62,7 @@ static void
 nouveau_switcheroo_reprobe(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
-	drm_fb_helper_output_poll_changed(dev);
+	nouveau_output_poll_changed(dev);
 }
 
 static bool
