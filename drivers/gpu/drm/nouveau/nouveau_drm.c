@@ -592,10 +592,11 @@ nouveau_drm_load(struct drm_device *dev, unsigned long flags)
 		pm_runtime_allow(dev->dev);
 		pm_runtime_mark_last_busy(dev->dev);
 		pm_runtime_put(dev->dev);
-	} else {
-		/* enable polling for external displays */
-		drm_kms_helper_poll_enable(dev);
 	}
+
+	/* enable polling for connectors without hpd */
+	drm_kms_helper_poll_enable(dev);
+
 	return 0;
 
 fail_dispinit:
