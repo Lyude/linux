@@ -387,6 +387,7 @@ nouveau_display_acpi_ntfy(struct notifier_block *nb, unsigned long val,
 			 * connector hotplug on a runtime suspended GPU,
 			 * schedule hpd_work to check.
 			 */
+			NV_DEBUG(drm, "ACPI requested connector probe\n");
 			schedule_work(&drm->hpd_work);
 
 			/* acpi-video should not generate keypresses for this */
