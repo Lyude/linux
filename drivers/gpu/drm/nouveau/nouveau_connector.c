@@ -1114,6 +1114,32 @@ nouveau_connector_funcs_lvds = {
 	.atomic_get_property = nouveau_conn_atomic_get_property,
 };
 
+static void
+nouveau_connector_hotplug_probe(struct nouveau_connector *nv_conn)
+{
+	struct drm_modeset_acquire_ctx ctx;
+	struct drm_connector *conn = &nv_conn->base;
+	enum drm_connector_status old_status;
+	struct drm_device *dev = conn->dev;
+	bool changed;
+
+	mutex_lock(&dev->mode_config.mutex);
+
+	drm_modeset_acquire_init(&ctx, 0);
+	drm_modeset_lock(&dev->mode_config.connection_mutex, &ctx);
+
+	old_status = conn->status;
+	conn->status = drm_helper_probe_detect(conn, &ctx, true);
+	changed = old_status != conn->status;
+
+	drm_modeset_drop_locks(&ctx);
+	drm_modeset_acquire_fini(&ctx);
+	mutex_unlock(&dev->mode_config.mutex);
+
+	if (changed)
+		drm_kms_helper_hotplug_event(dev);
+}
+
 static int
 nouveau_connector_hotplug(struct nvif_notify *notify)
 {
@@ -1138,7 +1164,7 @@ nouveau_connector_hotplug(struct nvif_notify *notify)
 				nv50_mstm_remove(nv_encoder->dp.mstm);
 		}
 
-		drm_helper_hpd_irq_event(connector->dev);
+		nouveau_connector_hotplug_probe(nv_connector);
 	}
 
 	return NVIF_NOTIFY_KEEP;
