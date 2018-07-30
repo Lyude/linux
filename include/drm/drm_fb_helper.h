@@ -232,6 +232,14 @@ struct drm_fb_helper {
 	 * See also: @deferred_setup
 	 */
 	int preferred_bpp;
+
+	/**
+	 * @hotplug_suspended:
+	 *
+	 * Whether or not we can currently handle hotplug events, or if we
+	 * need to wait for the DRM device to uninhibit us.
+	 */
+	bool hotplug_suspended;
 };
 
 /**
@@ -330,6 +338,13 @@ void drm_fb_helper_fbdev_teardown(struct drm_device *dev);
 
 void drm_fb_helper_lastclose(struct drm_device *dev);
 void drm_fb_helper_output_poll_changed(struct drm_device *dev);
+
+void drm_fb_helper_resume_hotplug(struct drm_fb_helper *fb_helper);
+bool __must_check
+drm_fb_helper_suspend_hotplug(struct drm_fb_helper *fb_helper);
+bool
+drm_fb_helper_hotplugged_in_suspend(struct drm_fb_helper *fb_helper);
+
 #else
 static inline void drm_fb_helper_prepare(struct drm_device *dev,
 					struct drm_fb_helper *helper,
@@ -564,6 +579,21 @@ static inline void drm_fb_helper_output_poll_changed(struct drm_device *dev)
 {
 }
 
+static inline void
+drm_fb_helper_resume_hotplug(struct drm_fb_helper *fb_helper)
+{
+}
+static inline bool __must_check
+drm_fb_helper_suspend_hotplug(struct drm_fb_helper *fb_helper)
+{
+	return true;
+}
+
+static inline bool
+drm_fb_helper_hotplugged_in_suspend(struct drm_fb_helper *fb_helper)
+{
+	return false;
+}
 #endif
 
 static inline int
