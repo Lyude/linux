@@ -84,6 +84,13 @@ static DEFINE_MUTEX(kernel_fb_helper_lock);
  * For suspend/resume consider using drm_mode_config_helper_suspend() and
  * drm_mode_config_helper_resume() which takes care of fbdev as well.
  *
+ * For runtime suspend and runtime resume, drivers which need to disable
+ * normal hotplug handling should consider using
+ * drm_fb_helper_suspend_hotplug() and drm_fb_helper_resume_hotplug() to
+ * avoid deadlocking with fb_helper's hotplug handling. When these helpers are
+ * used, drm_fb_helper_hotplugged_in_suspend() should also be used to avoid
+ * racing with a device's normal hotplug detection.
+ *
  * All other functions exported by the fb helper library can be used to
  * implement the fbdev driver interface by the driver.
  *
@@ -2733,6 +2740,195 @@ int drm_fb_helper_initial_config(struct drm_fb_helper *fb_helper, int bpp_sel)
 }
 EXPORT_SYMBOL(drm_fb_helper_initial_config);
 
+static bool
+drm_fb_helper_hotplugged_in_suspend_unlocked(struct drm_fb_helper *fb_helper)
+{
+	return fb_helper->hotplug_suspended &&
+	       fb_helper->delayed_hotplug &&
+	       !fb_helper->deferred_setup &&
+	       fb_helper->fb &&
+	       drm_fb_helper_is_bound(fb_helper);
+}
+
+/**
+ * drm_fb_helper_resume_hotplug - Resume normal fb_helper hotplug handling
+ * @fb_helper: driver-allocated fbdev helper, can be NULL
+ *
+ * Uninhibit fb_helper's hotplug handling after it was previously inhibited by
+ * a call to drm_fb_helper_suspend_hotplug(). Unlike
+ * drm_fb_helper_suspend_hotplug(), this function will wait on
+ * fb_helper->lock.
+ *
+ * This helper will take care of handling any hotplug events that happened
+ * while fb_helper's hotplug handling was suspended. Since this possibly
+ * implies a call to drm_fb_helper_hotplug_event(), care must be taken when
+ * calling this function as it may initiate a modeset.
+ *
+ * Please note that this function is different from
+ * drm_fb_helper_set_suspend(). It does not resume fb_helper, it only allows
+ * fb_helper to probe connectors in response to changes to the device's
+ * connector configuration if this functionality was previously disabled by
+ * drm_fb_helper_suspend_hotplug(). Generally, a driver will only want to call
+ * this in it's runtime resume callbacks.
+ *
+ * Drivers calling drm_fb_helper_suspend_hotplug() must make sure to call this
+ * somewhere in their runtime resume callbacks.
+ *
+ * See also: drm_fb_helper_suspend_hotplug()
+ */
+void
+drm_fb_helper_resume_hotplug(struct drm_fb_helper *fb_helper)
+{
+	bool changed;
+
+	if (!drm_fbdev_emulation || !fb_helper)
+		return;
+
+	mutex_lock(&fb_helper->lock);
+
+	changed = drm_fb_helper_hotplugged_in_suspend_unlocked(fb_helper);
+	if (changed)
+		fb_helper->delayed_hotplug = false;
+
+	fb_helper->hotplug_suspended = false;
+
+	mutex_unlock(&fb_helper->lock);
+
+	if (changed)
+		drm_fb_helper_hotplug_event(fb_helper);
+}
+EXPORT_SYMBOL(drm_fb_helper_resume_hotplug);
+
+/**
+ * drm_fb_helper_suspend_hotplug - Attempt to temporarily suspend fb_helper's
+ *                                 hotplug handling
+ * @fb_helper: driver-allocated fbdev helper, can be NULL
+ *
+ * Temporarily inhibit fb_helper from responding to connector changes without
+ * blocking on fb_helper->lock, if possible. This can be called by a DRM
+ * driver early on in its runtime suspend callback to both check whether or
+ * not fb_helper is still busy, and prevent hotplugs that might occur part-way
+ * through the runtime suspend process from being handled by fb_helper until
+ * drm_fb_helper_resume_hotplug() is called. This dramatically simplifies the
+ * runtime suspend process, as it eliminates the possibility that fb_helper
+ * might try to perform a modeset half way through the runtime suspend process
+ * in response to a connector hotplug, something which will almost certainly
+ * lead to deadlocking for drivers that need to disable normal hotplug
+ * handling in their runtime suspend callbacks.
+ *
+ * Calls to this function should be put at the very start of a driver's
+ * runtime suspend operation if desired. The driver is then responsible for
+ * re-enabling fb_helper hotplug handling when normal hotplug detection
+ * becomes available on the device again by calling
+ * drm_fb_helper_resume_hotplug(). Usually, a driver will want to re-enable
+ * fb_helper hotplug handling once the hotplug detection capabilities of its
+ * devices have returned to normal (e.g. when the device is runtime resumed,
+ * or after the runtime suspend process was aborted for some reason).
+ *
+ * Please note that this function is different from
+ * drm_fb_helper_set_suspend(), in that it does not actually suspend
+ * fb_helper. It only prevents fb_helper from responding to connector hotplugs
+ * on its own. Generally, a driver will only want to call this in its runtime
+ * suspend callback.
+ *
+ * See also:
+ * drm_fb_helper_hotplugged_in_suspend()
+ * drm_fb_helper_resume_hotplug()
+ *
+ * Returns:
+ * True if hotplug handling was disabled successfully, or fb_helper wasn't
+ * actually initialized/enabled yet. False if grabbing &fb_helper->lock would
+ * have meant blocking on fb_helper. When this function returns false, this
+ * usually implies means that fb_helper is still busy doing something such as
+ * probing connectors or performing a modeset. Drivers should treat this the
+ * same way they would any other activity on the device, and abort the runtime
+ * suspend process as early as possible in response.
+ */
+bool __must_check
+drm_fb_helper_suspend_hotplug(struct drm_fb_helper *fb_helper)
+{
+	if (!drm_fbdev_emulation || !fb_helper)
+		return true;
+
+	if (!mutex_trylock(&fb_helper->lock))
+		return false;
+
+	fb_helper->hotplug_suspended = true;
+	mutex_unlock(&fb_helper->lock);
+
+	return true;
+}
+EXPORT_SYMBOL(drm_fb_helper_suspend_hotplug);
+
+/**
+ * drm_fb_helper_hotplugged_in_suspend - Check whether or not fb_helper has a
+ *                                       hotplug event that's waiting due to
+ *                                       fb_helper hotplugging being suspended
+ * @fb_helper: driver-allocated fbdev helper, can be NULL
+ *
+ * Check whether or not fb_helper has received a hotplug event while its
+ * hotplug handling has been suspended by drm_fb_helper_suspend_hotplug().
+ *
+ * During the runtime suspend process, drivers that handle the dedicated GPU
+ * on a dual-GPU system may need to disable their normal means of hotplug
+ * notifications (e.g. from the GPU itself) and switch over to receiving
+ * ACPI notifications from the machine's firmware that indicate when the GPU
+ * needs to be woken back up to perform a connector probe. Generally, there
+ * will be a period between the point where the driver suspends fb_helper
+ * hotplug handling with drm_fb_helper_suspend_hotplug() and the point in
+ * which the GPU enables ACPI notifications and disables its normal hotplug
+ * interrupts. During this period, it's possible that a hotplug event could be
+ * received and processed by the normal means of hotplug detection. When this
+ * happens, fb_helper will refrain from reacting to the hotplug event and
+ * merely note that connector reprobing must be perfomed once its hotplug
+ * handling has been resumed with drm_fb_helper_resume_hotplug().
+ *
+ * This can lead to a less obvious issue. While the hotplug event will still
+ * have been propagated to userspace via sysfs, there will be nothing to
+ * respond to it by waking up and reprobing the GPU's connectors if fbcon is
+ * the only one in charge of the GPU's displays, as its hotplug handling has
+ * been suspended. This could lead to that hotplug event being dropped until
+ * something else unrelated wakes up the GPU, and fb_helper's hotplug handling
+ * is resumed.
+ *
+ * This function can be called after a DRM driver disables its normal means
+ * of hotplug detection in order to check whether or not there is currently a
+ * hotplug that fb_helper has received, but not responded to yet. If this is
+ * the case, the driver can simply abort its runtime suspend process and
+ * re-enable fb_helper hotplug handling with drm_fb_helper_resume_hotplug(),
+ * allowing for a race-free runtime suspend process.
+ *
+ * Drivers which use drm_fb_helper_suspend_hotplug() in their runtime suspend
+ * process are strongly recommended to use this function to avoid such a race
+ * condition.
+ *
+ * See also:
+ * drm_fb_helper_suspend_hotplug()
+ * drm_fb_helper_resume_hotplug()
+ *
+ * Returns:
+ * True if fb_helper's hotplug handling was suspended, and it has received a
+ * hotplug event during the time in which its been suspended. False
+ * otherwise. When this function returns true, drivers should treat this the
+ * same way as they would any other activity which would abort the runtime
+ * suspend process.
+ */
+bool
+drm_fb_helper_hotplugged_in_suspend(struct drm_fb_helper *fb_helper)
+{
+	bool ret;
+
+	if (!drm_fbdev_emulation || !fb_helper)
+		return false;
+
+	mutex_lock(&fb_helper->lock);
+	ret = drm_fb_helper_hotplugged_in_suspend_unlocked(fb_helper);
+	mutex_unlock(&fb_helper->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(drm_fb_helper_hotplugged_in_suspend);
+
 /**
  * drm_fb_helper_hotplug_event - respond to a hotplug notification by
  *                               probing all the outputs attached to the fb
@@ -2751,6 +2947,10 @@ EXPORT_SYMBOL(drm_fb_helper_initial_config);
  * for a race-free fbcon setup and will make sure that the fbdev emulation will
  * not miss any hotplug events.
  *
+ * See also:
+ * drm_fb_helper_suspend_hotplug()
+ * drm_fb_helper_resume_hotplug()
+ *
  * RETURNS:
  * 0 on success and a non-zero error code otherwise.
  */
@@ -2768,7 +2968,8 @@ int drm_fb_helper_hotplug_event(struct drm_fb_helper *fb_helper)
 		return err;
 	}
 
-	if (!fb_helper->fb || !drm_fb_helper_is_bound(fb_helper)) {
+	if (!fb_helper->fb || !drm_fb_helper_is_bound(fb_helper) ||
+	    fb_helper->hotplug_suspended) {
 		fb_helper->delayed_hotplug = true;
 		mutex_unlock(&fb_helper->lock);
 		return err;
