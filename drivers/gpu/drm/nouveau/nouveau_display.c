@@ -608,24 +608,46 @@ nouveau_display_destroy(struct drm_device *dev)
 int
 nouveau_display_suspend(struct drm_device *dev, bool runtime)
 {
+	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nouveau_display *disp = nouveau_display(dev);
 	struct drm_crtc *crtc;
+	bool using_atomic = drm_drv_uses_atomic_modeset(dev);
+	int ret;
 
-	if (drm_drv_uses_atomic_modeset(dev)) {
-		if (!runtime) {
-			disp->suspend = drm_atomic_helper_suspend(dev);
-			if (IS_ERR(disp->suspend)) {
-				int ret = PTR_ERR(disp->suspend);
-				disp->suspend = NULL;
-				return ret;
-			}
+	if (!runtime && using_atomic) {
+		disp->suspend = drm_atomic_helper_suspend(dev);
+		if (IS_ERR(disp->suspend)) {
+			int ret = PTR_ERR(disp->suspend);
+			disp->suspend = NULL;
+			return ret;
 		}
-
-		nouveau_display_fini(dev, true);
-		return 0;
 	}
 
 	nouveau_display_fini(dev, true);
+
+	if (runtime && drm_fb_helper_hotplugged_in_suspend(dev->fb_helper)) {
+		NV_DEBUG(drm, "interrupted by delayed fb_helper hotplug\n");
+
+		/* We don't need to run the whole nouveau_display_resume()
+		 * process here, just undo what we did in
+		 * nouveau_display_fini()
+		 */
+		NV_DEBUG(drm, "resuming display...\n");
+		ret = nouveau_display_init(dev);
+		if (WARN_ON(ret)) {
+			NV_ERROR(drm, "Failed to bring back display!\n");
+			return ret;
+		}
+
+		return -EBUSY;
+	}
+
+	/* Any hotplugs received after this point will be picked up by ACPI,
+	 * which will wake us up properly before actually trying to handle the
+	 * hotplug.
+	 */
+	if (using_atomic)
+		return 0;
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct nouveau_framebuffer *nouveau_fb;

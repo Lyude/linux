@@ -466,6 +466,7 @@ nouveau_fbcon_set_suspend_work(struct work_struct *work)
 	console_unlock();
 
 	if (state == FBINFO_STATE_RUNNING) {
+		drm_fb_helper_resume_hotplug(drm->dev->fb_helper);
 		pm_runtime_mark_last_busy(drm->dev->dev);
 		pm_runtime_put_sync(drm->dev->dev);
 	}
