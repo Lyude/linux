@@ -841,6 +841,9 @@ nouveau_pmops_runtime_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
+	if (!drm_fb_helper_suspend_hotplug(drm_dev->fb_helper))
+		return -EBUSY;
+
 	ret = nouveau_do_suspend(drm_dev, true);
 	if (ret)
 		return ret;
