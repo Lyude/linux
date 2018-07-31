@@ -572,13 +572,14 @@ nouveau_connector_detect(struct drm_connector *connector, bool force)
 		nv_connector->edid = NULL;
 	}
 
-	/* Outputs are only polled while runtime active, so resuming the
-	 * device here is unnecessary (and would deadlock upon runtime suspend
-	 * because it waits for polling to finish). We do however, want to
-	 * prevent the autosuspend timer from elapsing during this operation
-	 * if possible.
+	/* Output polling and HPD only happens while we're runtime active, so
+	 * resuming the device here is unnecessary (and would deadlock upon
+	 * runtime suspend because it waits for polling to finish). We do
+	 * however, want to prevent the autosuspend timer from elapsing during
+	 * this operation if possible.
 	 */
-	if (drm_kms_helper_is_poll_worker()) {
+	if (drm_kms_helper_is_poll_worker() ||
+	    nv_connector->hpd_task == current) {
 		pm_runtime_get_noresume(dev->dev);
 	} else {
 		ret = pm_runtime_get_sync(dev->dev);
@@ -1151,6 +1152,8 @@ nouveau_connector_hotplug(struct nvif_notify *notify)
 	const char *name = connector->name;
 	struct nouveau_encoder *nv_encoder;
 
+	nv_connector->hpd_task = current;
+
 	if (rep->mask & NVIF_NOTIFY_CONN_V0_IRQ) {
 		NV_DEBUG(drm, "service %s\n", name);
 		if ((nv_encoder = find_encoder(connector, DCB_OUTPUT_DP)))
@@ -1167,6 +1170,7 @@ nouveau_connector_hotplug(struct nvif_notify *notify)
 		nouveau_connector_hotplug_probe(nv_connector);
 	}
 
+	nv_connector->hpd_task = NULL;
 	return NVIF_NOTIFY_KEEP;
 }
 
