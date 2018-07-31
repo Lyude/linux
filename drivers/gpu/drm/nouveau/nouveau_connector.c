@@ -1152,6 +1152,11 @@ nouveau_connector_hotplug(struct nvif_notify *notify)
 	const char *name = connector->name;
 	struct nouveau_encoder *nv_encoder;
 
+	/* Resuming the device here isn't possible; but the suspend PM ops
+	 * will wait for us to finish our work before disabling us so this
+	 * should be enough
+	 */
+	pm_runtime_get_noresume(drm->dev->dev);
 	nv_connector->hpd_task = current;
 
 	if (rep->mask & NVIF_NOTIFY_CONN_V0_IRQ) {
@@ -1171,6 +1176,9 @@ nouveau_connector_hotplug(struct nvif_notify *notify)
 	}
 
 	nv_connector->hpd_task = NULL;
+
+	pm_runtime_mark_last_busy(drm->dev->dev);
+	pm_runtime_put_autosuspend(drm->dev->dev);
 	return NVIF_NOTIFY_KEEP;
 }
 
