@@ -45,6 +45,7 @@ struct nouveau_connector {
 	u8 *dcb;
 
 	struct nvif_notify hpd;
+	struct task_struct *hpd_task;
 
 	struct drm_dp_aux aux;
 
