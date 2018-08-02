@@ -568,6 +568,13 @@ struct drm_dp_mst_topology_mgr {
 	 * avoid locking inversion.
 	 */
 	struct work_struct destroy_connector_work;
+#ifdef CONFIG_DEBUG_FS
+	/**
+	 * @debugfs_entry: dentry for dp_mst_status located in connector's
+	 * debugfs directory.
+	 */
+	struct dentry *debugfs_entry;
+#endif
 };
 
 int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,

@@ -27,6 +27,8 @@
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/i2c.h>
+#include <linux/pm_runtime.h>
+#include <linux/debugfs.h>
 #include <drm/drm_dp_mst_helper.h>
 #include <drm/drmP.h>
 
@@ -3039,9 +3041,61 @@ void drm_dp_mst_dump_topology(struct seq_file *m,
 	}
 
 	mutex_unlock(&mgr->lock);
-
 }
 EXPORT_SYMBOL(drm_dp_mst_dump_topology);
+
+#ifdef CONFIG_DEBUG_FS
+static int drm_dp_mst_topology_mgr_debugfs_status_show(struct seq_file *m,
+						       void *data)
+{
+	struct drm_dp_mst_topology_mgr *mgr = m->private;
+	int ret;
+
+	ret = pm_runtime_get_sync(mgr->aux->dev);
+	if (ret < 0 && ret != -EACCES)
+		return ret;
+
+	drm_dp_mst_dump_topology(m, mgr);
+
+	pm_runtime_mark_last_busy(mgr->aux->dev);
+	pm_runtime_put(mgr->aux->dev);
+
+	return 0;
+}
+
+static int drm_dp_mst_topology_mgr_debugfs_status_open(struct inode *inode,
+						       struct file *file)
+{
+	struct drm_dp_mst_topology_mgr *mgr = inode->i_private;
+
+	return single_open(file, drm_dp_mst_topology_mgr_debugfs_status_show,
+			   mgr);
+}
+
+static const struct file_operations drm_dp_mst_status_debugfs_fops = {
+	.owner = THIS_MODULE,
+	.open = drm_dp_mst_topology_mgr_debugfs_status_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static struct dentry *
+drm_dp_mst_topology_mgr_debugfs_init(struct drm_dp_mst_topology_mgr *mgr)
+{
+	struct drm_connector *connector =
+		drm_connector_lookup(mgr->dev, NULL, mgr->conn_base_id);
+
+	if (!connector->debugfs_entry) {
+		DRM_WARN_ONCE("no connector->debugfs_entry yet, dp_mst_status won't be created for connectors\n");
+		return NULL;
+	}
+
+	return debugfs_create_file("dp_mst_status", S_IFREG | S_IRUGO,
+				   connector->debugfs_entry, mgr,
+				   &drm_dp_mst_status_debugfs_fops);
+}
+#endif
 
 static void drm_dp_tx_work(struct work_struct *work)
 {
@@ -3213,6 +3267,10 @@ int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,
 				    &mst_state->base,
 				    &mst_state_funcs);
 
+#ifdef CONFIG_DEBUG_FS
+	mgr->debugfs_entry = drm_dp_mst_topology_mgr_debugfs_init(mgr);
+#endif
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_dp_mst_topology_mgr_init);
@@ -3223,6 +3281,10 @@ EXPORT_SYMBOL(drm_dp_mst_topology_mgr_init);
  */
 void drm_dp_mst_topology_mgr_destroy(struct drm_dp_mst_topology_mgr *mgr)
 {
+#ifdef CONFIG_DEBUG_FS
+	if (mgr->debugfs_entry)
+		debugfs_remove(mgr->debugfs_entry);
+#endif
 	flush_work(&mgr->work);
 	flush_work(&mgr->destroy_connector_work);
 	mutex_lock(&mgr->payload_lock);
