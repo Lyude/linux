@@ -842,6 +842,9 @@ nouveau_pmops_runtime_suspend(struct device *dev)
 	}
 
 	ret = nouveau_do_suspend(drm_dev, true);
+	if (ret)
+		return ret;
+
 	nouveau_switcheroo_optimus_dsm();
 	pci_save_state(pdev);
 	pci_disable_device(pdev);
