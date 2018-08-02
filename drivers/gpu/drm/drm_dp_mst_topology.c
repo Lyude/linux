@@ -2927,7 +2927,7 @@ static void drm_dp_mst_dump_mstb(struct seq_file *m,
 				 struct drm_dp_mst_branch *mstb)
 {
 	struct drm_dp_mst_port *port;
-	int tabs = mstb->lct;
+	int tabs = mstb->lct - 1;
 	char prefix[10];
 	int i;
 
