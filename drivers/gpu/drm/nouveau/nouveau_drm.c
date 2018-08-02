@@ -674,10 +674,11 @@ nouveau_do_suspend(struct drm_device *dev, bool runtime)
 	if (dev->mode_config.num_crtc) {
 		NV_DEBUG(drm, "suspending console...\n");
 		nouveau_fbcon_set_suspend(dev, 1);
+
 		NV_DEBUG(drm, "suspending display...\n");
 		ret = nouveau_display_suspend(dev, runtime);
 		if (ret)
-			return ret;
+			goto fail_fbcon;
 	}
 
 	NV_DEBUG(drm, "evicting buffers...\n");
@@ -719,7 +720,14 @@ fail_display:
 	if (dev->mode_config.num_crtc) {
 		NV_DEBUG(drm, "resuming display...\n");
 		nouveau_display_resume(dev, runtime);
+
+fail_fbcon:
+		NV_DEBUG(drm, "resuming console...\n");
+		nouveau_fbcon_set_suspend(dev, 0);
 	}
+
+	nouveau_led_resume(dev);
+
 	return ret;
 }
 
