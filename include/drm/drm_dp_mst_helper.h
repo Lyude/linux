@@ -573,7 +573,13 @@ struct drm_dp_mst_topology_mgr {
 	 * @debugfs_entry: dentry for dp_mst_status located in connector's
 	 * debugfs directory.
 	 */
-	struct dentry *debugfs_entry;
+	struct dentry *debugfs;
+
+	/**
+	 * @forced_off: Whether or not this topology mgr has been forcefully
+	 * disabled through debugfs
+	 */
+	bool forced_off;
 #endif
 };
 

@@ -2115,6 +2115,11 @@ int drm_dp_mst_topology_mgr_set_mst(struct drm_dp_mst_topology_mgr *mgr, bool ms
 	if (mst_state == mgr->mst_state)
 		goto out_unlock;
 
+	if (mst_state && mgr->forced_off) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	mgr->mst_state = mst_state;
 	/* set the device into MST mode */
 	if (mst_state) {
@@ -3045,8 +3050,7 @@ void drm_dp_mst_dump_topology(struct seq_file *m,
 EXPORT_SYMBOL(drm_dp_mst_dump_topology);
 
 #ifdef CONFIG_DEBUG_FS
-static int drm_dp_mst_topology_mgr_debugfs_status_show(struct seq_file *m,
-						       void *data)
+static int drm_dp_mst_debugfs_state_show(struct seq_file *m, void *data)
 {
 	struct drm_dp_mst_topology_mgr *mgr = m->private;
 	int ret;
@@ -3063,37 +3067,126 @@ static int drm_dp_mst_topology_mgr_debugfs_status_show(struct seq_file *m,
 	return 0;
 }
 
-static int drm_dp_mst_topology_mgr_debugfs_status_open(struct inode *inode,
-						       struct file *file)
+static int drm_dp_mst_debugfs_state_open(struct inode *inode,
+					 struct file *file)
 {
 	struct drm_dp_mst_topology_mgr *mgr = inode->i_private;
 
-	return single_open(file, drm_dp_mst_topology_mgr_debugfs_status_show,
-			   mgr);
+	return single_open(file, drm_dp_mst_debugfs_state_show, mgr);
 }
 
-static const struct file_operations drm_dp_mst_status_debugfs_fops = {
+static const struct file_operations drm_dp_mst_debugfs_state_fops = {
 	.owner = THIS_MODULE,
-	.open = drm_dp_mst_topology_mgr_debugfs_status_open,
+	.open = drm_dp_mst_debugfs_state_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = single_release,
 };
 
-static struct dentry *
-drm_dp_mst_topology_mgr_debugfs_init(struct drm_dp_mst_topology_mgr *mgr)
+static int drm_dp_mst_debugfs_enabled_show(struct seq_file *m, void *data)
 {
-	struct drm_connector *connector =
-		drm_connector_lookup(mgr->dev, NULL, mgr->conn_base_id);
+	struct drm_dp_mst_topology_mgr *mgr = m->private;
+	int ret;
 
-	if (!connector->debugfs_entry) {
-		DRM_WARN_ONCE("no connector->debugfs_entry yet, dp_mst_status won't be created for connectors\n");
-		return NULL;
+	ret = mutex_lock_interruptible(&mgr->lock);
+	if (ret)
+		return ret;
+	seq_printf(m, "%d\n", !mgr->forced_off);
+	mutex_unlock(&mgr->lock);
+
+	return 0;
+}
+
+static int drm_dp_mst_debugfs_enabled_open(struct inode *inode,
+					   struct file *file)
+{
+	return single_open(file, drm_dp_mst_debugfs_enabled_show,
+			   inode->i_private);
+}
+
+static ssize_t drm_dp_mst_debugfs_enabled_write(struct file *file,
+						const char __user *ubuf,
+						size_t len, loff_t *offp)
+{
+	struct drm_dp_mst_topology_mgr *mgr = file->f_inode->i_private;
+	struct drm_connector *connector;
+	const char *connector_name = NULL;
+	bool new_state;
+	int ret;
+
+	ret = kstrtobool_from_user(ubuf, len, &new_state);
+	if (ret)
+		return ret;
+
+	ret = pm_runtime_get_sync(mgr->dev->dev);
+	if (ret < 0 && ret != -EACCES)
+		return ret;
+
+	connector = drm_connector_lookup(mgr->dev, NULL, mgr->conn_base_id);
+	if (connector)
+		connector_name = connector->name;
+
+	ret = mutex_lock_interruptible(&mgr->lock);
+	if (ret)
+		goto out;
+
+	mgr->forced_off = !new_state;
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] mst_state forced to %d by debugfs\n",
+		      mgr->conn_base_id, connector_name, new_state);
+	mutex_unlock(&mgr->lock);
+
+	ret = drm_dp_mst_topology_mgr_set_mst(mgr, new_state);
+
+out:
+	if (connector)
+		drm_connector_put(connector);
+	pm_runtime_mark_last_busy(mgr->dev->dev);
+	pm_runtime_put(mgr->dev->dev);
+
+	return ret ?: len;
+}
+static const struct file_operations drm_dp_mst_debugfs_enabled_fops = {
+	.owner = THIS_MODULE,
+	.open = drm_dp_mst_debugfs_enabled_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = drm_dp_mst_debugfs_enabled_write,
+};
+
+static void
+drm_dp_mst_debugfs_init(struct drm_dp_mst_topology_mgr *mgr)
+{
+	struct drm_minor *minor = mgr->dev->primary;
+	struct drm_connector *connector;
+	struct dentry *root;
+
+	if (!minor->debugfs_root)
+		return;
+
+	/* Create the dp_mst directory for this device if it doesn't exist
+	 * already
+	 */
+	root = debugfs_lookup("dp_mst", minor->debugfs_root);
+	if (!root) {
+		root = debugfs_create_dir("dp_mst", minor->debugfs_root);
+		if (!root)
+			return;
 	}
 
-	return debugfs_create_file("dp_mst_status", S_IFREG | S_IRUGO,
-				   connector->debugfs_entry, mgr,
-				   &drm_dp_mst_status_debugfs_fops);
+	connector = drm_connector_lookup(mgr->dev, NULL, mgr->conn_base_id);
+	if (!connector)
+		return;
+
+	mgr->debugfs = debugfs_create_dir(connector->name, root);
+	if (!mgr->debugfs)
+		return;
+	drm_connector_put(connector);
+
+	debugfs_create_file("state", 0444, mgr->debugfs, mgr,
+			    &drm_dp_mst_debugfs_state_fops);
+	debugfs_create_file("enabled", 0644, mgr->debugfs, mgr,
+			    &drm_dp_mst_debugfs_enabled_fops);
 }
 #endif
 
@@ -3268,7 +3361,7 @@ int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,
 				    &mst_state_funcs);
 
 #ifdef CONFIG_DEBUG_FS
-	mgr->debugfs_entry = drm_dp_mst_topology_mgr_debugfs_init(mgr);
+	drm_dp_mst_debugfs_init(mgr);
 #endif
 
 	return 0;
@@ -3282,8 +3375,8 @@ EXPORT_SYMBOL(drm_dp_mst_topology_mgr_init);
 void drm_dp_mst_topology_mgr_destroy(struct drm_dp_mst_topology_mgr *mgr)
 {
 #ifdef CONFIG_DEBUG_FS
-	if (mgr->debugfs_entry)
-		debugfs_remove(mgr->debugfs_entry);
+	if (mgr->debugfs)
+		debugfs_remove_recursive(mgr->debugfs);
 #endif
 	flush_work(&mgr->work);
 	flush_work(&mgr->destroy_connector_work);

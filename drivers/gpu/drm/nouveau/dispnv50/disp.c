@@ -2132,7 +2132,8 @@ nv50_display_create(struct drm_device *dev)
 	struct nvif_device *device = &nouveau_drm(dev)->client.device;
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct dcb_table *dcb = &drm->vbios.dcb;
-	struct drm_connector *connector, *tmp;
+	struct drm_connector *connector;
+	struct drm_connector_list_iter iter;
 	struct nv50_disp *disp;
 	struct dcb_output *dcbe;
 	int crtcs, ret, i;
@@ -2223,7 +2224,8 @@ nv50_display_create(struct drm_device *dev)
 	}
 
 	/* cull any connectors we created that don't have an encoder */
-	list_for_each_entry_safe(connector, tmp, &dev->mode_config.connector_list, head) {
+	drm_connector_list_iter_begin(dev, &iter);
+	drm_for_each_connector_iter(connector, &iter) {
 		if (connector->encoder_ids[0])
 			continue;
 
@@ -2231,6 +2233,7 @@ nv50_display_create(struct drm_device *dev)
 			connector->name);
 		connector->funcs->destroy(connector);
 	}
+	drm_connector_list_iter_end(&iter);
 
 out:
 	if (ret)

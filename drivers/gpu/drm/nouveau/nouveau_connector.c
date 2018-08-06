@@ -391,13 +391,19 @@ nouveau_encoder_connector_get(struct nouveau_encoder *encoder)
 {
 	struct drm_device *dev = to_drm_encoder(encoder)->dev;
 	struct drm_connector *drm_connector;
+	struct drm_connector_list_iter iter;
+	struct nouveau_connector *found = NULL;
 
-	list_for_each_entry(drm_connector, &dev->mode_config.connector_list, head) {
-		if (drm_connector->encoder == to_drm_encoder(encoder))
-			return nouveau_connector(drm_connector);
+	drm_connector_list_iter_begin(dev, &iter);
+	drm_for_each_connector_iter(drm_connector, &iter) {
+		if (drm_connector->encoder == to_drm_encoder(encoder)) {
+			found = nouveau_connector(drm_connector);
+			break;
+		}
 	}
+	drm_connector_list_iter_end(&iter);
 
-	return NULL;
+	return found;
 }
 
 static void
