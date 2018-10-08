@@ -2614,7 +2614,7 @@ static int drm_dp_init_vcpi(struct drm_dp_mst_topology_mgr *mgr,
 }
 
 /**
- * drm_dp_atomic_find_vcpi_slots() - Find and add vcpi slots to the state
+ * drm_dp_atomic_find_vcpi_slots() - Find and add VCPI slots to the state
  * @state: global atomic state
  * @mgr: MST topology manager for the port
  * @port: port to find vcpi slots for
