@@ -2639,7 +2639,7 @@ int drm_dp_atomic_find_vcpi_slots(struct drm_atomic_state *state,
 		return -EINVAL;
 	req_slots = DIV_ROUND_UP(pbn, mgr->pbn_div);
 	DRM_DEBUG_KMS("vcpi slots req=%d, avail=%d\n",
-			req_slots, topology_state->avail_slots);
+		      req_slots, topology_state->avail_slots);
 
 	if (req_slots > topology_state->avail_slots) {
 		drm_dp_put_port(port);
