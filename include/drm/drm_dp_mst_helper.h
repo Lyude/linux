@@ -406,8 +406,15 @@ struct drm_dp_payload {
 
 #define to_dp_mst_topology_state(x) container_of(x, struct drm_dp_mst_topology_state, base)
 
+struct drm_dp_vcpi_allocation {
+	struct drm_dp_mst_port *port;
+	int vcpi;
+	struct list_head next;
+};
+
 struct drm_dp_mst_topology_state {
 	struct drm_private_state base;
+	struct list_head vcpis;
 	int avail_slots;
 	struct drm_dp_mst_topology_mgr *mgr;
 };
@@ -624,7 +631,7 @@ int drm_dp_atomic_find_vcpi_slots(struct drm_atomic_state *state,
 				  struct drm_dp_mst_port *port, int pbn);
 int drm_dp_atomic_release_vcpi_slots(struct drm_atomic_state *state,
 				     struct drm_dp_mst_topology_mgr *mgr,
-				     int slots);
+				     struct drm_dp_mst_port *port);
 int drm_dp_send_power_updown_phy(struct drm_dp_mst_topology_mgr *mgr,
 				 struct drm_dp_mst_port *port, bool power_up);
 

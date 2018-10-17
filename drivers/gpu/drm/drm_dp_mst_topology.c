@@ -2620,15 +2620,25 @@ static int drm_dp_init_vcpi(struct drm_dp_mst_topology_mgr *mgr,
  * @port: port to find vcpi slots for
  * @pbn: bandwidth required for the mode in PBN
  *
+ * Allocates VCPI slots to @port, replacing any previous VCPI allocations it
+ * may have had. Any atomic drivers which support MST must call this function
+ * in their connector's atomic_check() handler to ensure that the given
+ * configuration in @state can fit into the available bandwidth.
+ *
+ * See also: drm_dp_atomic_release_vcpi_slots()
+ *
  * RETURNS:
- * Total slots in the atomic state assigned for this port or error
+ * Total slots in the atomic state assigned for this port, or a negative error
+ * code if the port no longer exists or there isn't enough bandwidth for the
+ * configuration in @state.
  */
 int drm_dp_atomic_find_vcpi_slots(struct drm_atomic_state *state,
 				  struct drm_dp_mst_topology_mgr *mgr,
 				  struct drm_dp_mst_port *port, int pbn)
 {
 	struct drm_dp_mst_topology_state *topology_state;
-	int req_slots;
+	struct drm_dp_vcpi_allocation *pos, *vcpi = NULL;
+	int avail_slots, prev_slots, req_slots, ret;
 
 	topology_state = drm_atomic_get_mst_topology_state(state, mgr);
 	if (IS_ERR(topology_state))
@@ -2637,20 +2647,50 @@ int drm_dp_atomic_find_vcpi_slots(struct drm_atomic_state *state,
 	port = drm_dp_get_validated_port_ref(mgr, port);
 	if (port == NULL)
 		return -EINVAL;
-	req_slots = DIV_ROUND_UP(pbn, mgr->pbn_div);
-	DRM_DEBUG_KMS("vcpi slots req=%d, avail=%d\n",
-		      req_slots, topology_state->avail_slots);
 
-	if (req_slots > topology_state->avail_slots) {
-		drm_dp_put_port(port);
-		return -ENOSPC;
+	/* Find the current allocation for this port, if any */
+	list_for_each_entry(pos, &topology_state->vcpis, next) {
+		if (pos->port == port) {
+			vcpi = pos;
+			prev_slots = vcpi->vcpi;
+			break;
+		}
+	}
+	if (!vcpi)
+		prev_slots = 0;
+
+	req_slots = DIV_ROUND_UP(pbn, mgr->pbn_div);
+
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] vcpi %d -> %d (%d avail)\n",
+		      port->connector->base.id, port->connector->name,
+		      prev_slots, req_slots, topology_state->avail_slots);
+
+	avail_slots = topology_state->avail_slots + prev_slots;
+	if (req_slots > avail_slots) {
+		ret = -ENOSPC;
+		goto out;
 	}
 
-	topology_state->avail_slots -= req_slots;
+	topology_state->avail_slots = avail_slots - req_slots;
 	DRM_DEBUG_KMS("vcpi slots avail=%d", topology_state->avail_slots);
 
+	/* Add the new allocation to the state */
+	if (!vcpi) {
+		vcpi = kzalloc(sizeof(*vcpi), GFP_KERNEL);
+		if (!vcpi) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		vcpi->port = port;
+		list_add(&vcpi->next, &topology_state->vcpis);
+	}
+	vcpi->vcpi = req_slots;
+
+	ret = req_slots;
+out:
 	drm_dp_put_port(port);
-	return req_slots;
+	return ret;
 }
 EXPORT_SYMBOL(drm_dp_atomic_find_vcpi_slots);
 
@@ -2658,32 +2698,47 @@ EXPORT_SYMBOL(drm_dp_atomic_find_vcpi_slots);
  * drm_dp_atomic_release_vcpi_slots() - Release allocated vcpi slots
  * @state: global atomic state
  * @mgr: MST topology manager for the port
- * @slots: number of vcpi slots to release
+ *
+ * Releases any VCPI slots that have been allocated to a port in the atomic
+ * state. Any atomic drivers which support MST must call this function in
+ * their connector's atomic_check() handler when the connector will no longer
+ * have VCPI allocated (e.g. because it's CRTC was removed).
+ *
+ * It is OK to call this even if @port has been removed from the system, in
+ * which case it will just amount to a no-op.
+ *
+ * See also: drm_dp_atomic_find_vcpi_slots()
  *
  * RETURNS:
- * 0 if @slots were added back to &drm_dp_mst_topology_state->avail_slots or
- * negative error code
+ * 0 if all slots for this port were added back to
+ * &drm_dp_mst_topology_state->avail_slots or negative error code
  */
 int drm_dp_atomic_release_vcpi_slots(struct drm_atomic_state *state,
 				     struct drm_dp_mst_topology_mgr *mgr,
-				     int slots)
+				     struct drm_dp_mst_port *port)
 {
 	struct drm_dp_mst_topology_state *topology_state;
+	struct drm_dp_vcpi_allocation *tmp, *pos;
 
 	topology_state = drm_atomic_get_mst_topology_state(state, mgr);
 	if (IS_ERR(topology_state))
 		return PTR_ERR(topology_state);
 
-	/* We cannot rely on port->vcpi.num_slots to update
-	 * topology_state->avail_slots as the port may not exist if the parent
-	 * branch device was unplugged. This should be fixed by tracking
-	 * per-port slot allocation in drm_dp_mst_topology_state instead of
-	 * depending on the caller to tell us how many slots to release.
-	 */
-	topology_state->avail_slots += slots;
-	DRM_DEBUG_KMS("vcpi slots released=%d, avail=%d\n",
-			slots, topology_state->avail_slots);
+	list_for_each_entry_safe(pos, tmp, &topology_state->vcpis, next) {
+		if (pos->port == port) {
+			list_del(&pos->next);
+			topology_state->avail_slots += pos->vcpi;
+			DRM_DEBUG_KMS("vcpi slots released=%d, avail=%d\n",
+				      pos->vcpi, topology_state->avail_slots);
 
+			kfree(pos);
+			return 0;
+		}
+	}
+
+	/* If no allocation was found, all that means is that the port was
+	 * destroyed since the last atomic commit. That's OK!
+	 */
 	return 0;
 }
 EXPORT_SYMBOL(drm_dp_atomic_release_vcpi_slots);
@@ -3112,15 +3167,49 @@ static void drm_dp_destroy_connector_work(struct work_struct *work)
 static struct drm_private_state *
 drm_dp_mst_duplicate_state(struct drm_private_obj *obj)
 {
-	struct drm_dp_mst_topology_state *state;
+	struct drm_dp_mst_topology_state *state, *old_state =
+		to_dp_mst_topology_state(obj->state);
+	struct drm_dp_mst_topology_mgr *mgr = old_state->mgr;
+	struct drm_dp_mst_port *port;
+	struct drm_dp_vcpi_allocation *pos, *vcpi;
 
-	state = kmemdup(obj->state, sizeof(*state), GFP_KERNEL);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return NULL;
 
 	__drm_atomic_helper_private_obj_duplicate_state(obj, &state->base);
 
+	state->mgr = mgr;
+	state->avail_slots = 63;
+	INIT_LIST_HEAD(&state->vcpis);
+
+	/* Copy over the VCPI allocations for ports that still exist */
+	list_for_each_entry(pos, &old_state->vcpis, next) {
+		port = drm_dp_get_validated_port_ref(mgr, pos->port);
+		if (!port)
+			continue;
+
+		vcpi = kmalloc(sizeof(*vcpi), GFP_KERNEL);
+		if (!vcpi) {
+			drm_dp_put_port(port);
+			goto fail_alloc;
+		}
+
+		vcpi->port = port;
+		vcpi->vcpi = pos->vcpi;
+		list_add(&vcpi->next, &state->vcpis);
+		state->avail_slots -= vcpi->vcpi;
+
+		drm_dp_put_port(port);
+	}
+
 	return &state->base;
+
+fail_alloc:
+	list_for_each_entry_safe(pos, vcpi, &state->vcpis, next)
+		kfree(pos);
+
+	return NULL;
 }
 
 static void drm_dp_mst_destroy_state(struct drm_private_obj *obj,
@@ -3128,6 +3217,10 @@ static void drm_dp_mst_destroy_state(struct drm_private_obj *obj,
 {
 	struct drm_dp_mst_topology_state *mst_state =
 		to_dp_mst_topology_state(state);
+	struct drm_dp_vcpi_allocation *pos, *tmp;
+
+	list_for_each_entry_safe(pos, tmp, &mst_state->vcpis, next)
+		kfree(pos);
 
 	kfree(mst_state);
 }
@@ -3213,6 +3306,7 @@ int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,
 		return -ENOMEM;
 
 	mst_state->mgr = mgr;
+	INIT_LIST_HEAD(&mst_state->vcpis);
 
 	/* max. time slots - one slot for MTP header */
 	mst_state->avail_slots = 63;

@@ -114,28 +114,31 @@ static int intel_dp_mst_atomic_check(struct drm_connector *connector,
 	struct drm_connector_state *old_conn_state;
 	struct drm_crtc *old_crtc;
 	struct drm_crtc_state *crtc_state;
-	int slots, ret = 0;
+	struct intel_connector *intel_connector =
+		to_intel_connector(connector);
+	struct drm_dp_mst_topology_mgr *mgr =
+		&intel_connector->mst_port->mst_mgr;
+	struct drm_dp_mst_port *port = intel_connector->port;
+	int ret = 0;
 
 	old_conn_state = drm_atomic_get_old_connector_state(state, connector);
 	old_crtc = old_conn_state->crtc;
 	if (!old_crtc)
 		return ret;
 
-	crtc_state = drm_atomic_get_new_crtc_state(state, old_crtc);
-	slots = to_intel_crtc_state(crtc_state)->dp_m_n.tu;
-	if (drm_atomic_crtc_needs_modeset(crtc_state) && slots > 0) {
-		struct drm_dp_mst_topology_mgr *mgr;
-		struct drm_encoder *old_encoder;
+	/* Free VCPI, since compute_config() won't be run */
+	if (!new_conn_state->crtc) {
+		crtc_state = drm_atomic_get_new_crtc_state(state, old_crtc);
 
-		old_encoder = old_conn_state->best_encoder;
-		mgr = &enc_to_mst(old_encoder)->primary->dp.mst_mgr;
-
-		ret = drm_dp_atomic_release_vcpi_slots(state, mgr, slots);
-		if (ret)
-			DRM_DEBUG_KMS("failed releasing %d vcpi slots:%d\n", slots, ret);
-		else
-			to_intel_crtc_state(crtc_state)->dp_m_n.tu = 0;
+		ret = drm_dp_atomic_release_vcpi_slots(state, mgr, port);
+		if (ret) {
+			DRM_DEBUG_KMS("failed releasing vcpi slots: %d\n",
+				      ret);
+			return ret;
+		}
+		to_intel_crtc_state(crtc_state)->dp_m_n.tu = 0;
 	}
+
 	return ret;
 }
 
